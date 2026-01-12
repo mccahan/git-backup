@@ -133,6 +133,16 @@ docker run -d \
   git-backup
 ```
 
+**Note**: The Docker build requires access to Alpine package repositories. If building in a restricted environment, you may need to configure appropriate network access or use a Docker registry mirror.
+
+## Published Images
+
+Pre-built images are automatically published to GitHub Container Registry on every push to the main branch and on tagged releases. You can pull the latest image with:
+
+```bash
+docker pull ghcr.io/mccahan/git-backup:latest
+```
+
 ## Logs
 
 View container logs to monitor backup activity:
