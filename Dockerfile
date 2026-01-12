@@ -1,4 +1,4 @@
-FROM node:25-alpine
+FROM node:25-slim
 
 # Install required packages
 RUN apk add --no-cache \
