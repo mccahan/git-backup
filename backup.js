@@ -42,6 +42,7 @@ console.log(`=== Git Backup Started at ${new Date().toISOString()} ===`);
 async function runBackup() {
   try {
     // Initialize git with configuration
+    console.log('Configuring Git user');
     const git = simpleGit();
     await git.addConfig('user.name', config.userName);
     await git.addConfig('user.email', config.userEmail);
@@ -50,11 +51,12 @@ async function runBackup() {
     let repoGit;
 
     // Clone or update the repository
+    console.log('Checking repository status');
     if (!fs.existsSync(path.join(config.repoDir, '.git'))) {
       console.log(`Cloning repository: ${config.repoUrl}`);
       await simpleGit().clone(config.repoUrl, config.repoDir);
       repoGit = simpleGit(config.repoDir);
-      
+      console.log(`Repository cloned to ${config.repoDir}`);
       // Try to checkout the branch, create if doesn't exist
       try {
         await repoGit.checkout(config.branch);
