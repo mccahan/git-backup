@@ -20,6 +20,7 @@ if [ -n "$GITHUB_TOKEN" ]; then
     TEMP_TOKEN_FILE=$(mktemp)
     chmod 600 "$TEMP_TOKEN_FILE"
     echo "$GITHUB_TOKEN" > "$TEMP_TOKEN_FILE"
+    unset GITHUB_TOKEN
     gh auth login --with-token < "$TEMP_TOKEN_FILE"
     rm -f "$TEMP_TOKEN_FILE"
 fi
