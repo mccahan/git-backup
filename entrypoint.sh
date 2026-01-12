@@ -16,7 +16,12 @@ fi
 
 # Configure GitHub CLI
 if [ -n "$GITHUB_TOKEN" ]; then
-    echo "$GITHUB_TOKEN" | gh auth login --with-token
+    # Use a temporary file with restricted permissions to avoid exposing token in process args
+    TEMP_TOKEN_FILE=$(mktemp)
+    chmod 600 "$TEMP_TOKEN_FILE"
+    echo "$GITHUB_TOKEN" > "$TEMP_TOKEN_FILE"
+    gh auth login --with-token < "$TEMP_TOKEN_FILE"
+    rm -f "$TEMP_TOKEN_FILE"
 fi
 
 # Set default backup interval (in hours)

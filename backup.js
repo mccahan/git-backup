@@ -58,6 +58,14 @@ async function runBackup() {
       ? path.join(config.repoDir, config.repoSubdir)
       : config.repoDir;
     
+    // Validate paths to prevent command injection
+    if (config.backupDir.includes('"') || config.backupDir.includes("'")) {
+      throw new Error('Invalid BACKUP_DIR: path contains quotes');
+    }
+    if (targetDir.includes('"') || targetDir.includes("'")) {
+      throw new Error('Invalid target directory: path contains quotes');
+    }
+    
     // Create subdirectory if it doesn't exist
     if (config.repoSubdir && !fs.existsSync(targetDir)) {
       console.log(`Creating subdirectory: ${config.repoSubdir}`);
@@ -66,10 +74,23 @@ async function runBackup() {
     
     console.log(`Copying files from ${config.backupDir} to ${targetDir}`);
     try {
-      execSync(
-        `rsync -av --delete --exclude='.git' --exclude='.gitignore' "${config.backupDir}/" "${targetDir}/"`,
-        { stdio: 'inherit' }
-      );
+      // Use array form to avoid shell injection
+      const { spawnSync } = require('child_process');
+      const result = spawnSync('rsync', [
+        '-av',
+        '--delete',
+        '--exclude=.git',
+        '--exclude=.gitignore',
+        `${config.backupDir}/`,
+        `${targetDir}/`
+      ], { stdio: 'inherit' });
+      
+      if (result.error) {
+        throw result.error;
+      }
+      if (result.status !== 0) {
+        throw new Error(`rsync exited with code ${result.status}`);
+      }
     } catch (error) {
       console.error('Error during rsync:', error.message);
       throw error;
@@ -113,23 +134,55 @@ async function generateCommitMessage(repoGit) {
     
     console.log('Generating commit message with GitHub Copilot...');
     
-    // Use GitHub Copilot to generate commit message
-    const copilotCommand = `gh copilot suggest -t shell "git commit with message summarizing these changes: ${diffStat.replace(/"/g, '\\"')}"`;
+    // Write diff to a temporary file to avoid command injection
+    const tmpFile = '/tmp/diff-stat.txt';
+    fs.writeFileSync(tmpFile, diffStat);
     
-    const output = execSync(copilotCommand, { 
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-
-    // Extract commit message from Copilot output
-    // Copilot typically returns: git commit -m "message"
-    const match = output.match(/git commit -m ["'](.+?)["']/);
-    
-    if (match && match[1]) {
-      return match[1];
+    try {
+      // Use GitHub Copilot to generate commit message
+      // Pass the diff via stdin instead of command line to avoid injection
+      const { spawnSync } = require('child_process');
+      const result = spawnSync('sh', ['-c', 
+        `cat "${tmpFile}" | gh copilot suggest -t shell "git commit with message summarizing these changes"`
+      ], { 
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+      
+      // Clean up temp file
+      try {
+        fs.unlinkSync(tmpFile);
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+      
+      if (result.error) {
+        throw result.error;
+      }
+      
+      const output = result.stdout || '';
+      
+      // Extract commit message from Copilot output
+      // Look for pattern: git commit -m "message" or git commit -m 'message'
+      const doubleQuoteMatch = output.match(/git commit -m "([^"]+)"/);
+      const singleQuoteMatch = output.match(/git commit -m '([^']+)'/);
+      
+      const match = doubleQuoteMatch || singleQuoteMatch;
+      
+      if (match && match[1]) {
+        return match[1];
+      }
+      
+      throw new Error('Could not parse Copilot response');
+    } catch (parseError) {
+      // Clean up temp file on error
+      try {
+        fs.unlinkSync(tmpFile);
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+      throw parseError;
     }
-    
-    throw new Error('Could not parse Copilot response');
   } catch (error) {
     console.log('Copilot unavailable or failed, using fallback message:', error.message);
     return `Backup: ${new Date().toISOString()}`;
