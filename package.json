@@ -4,12 +4,19 @@
   "description": "Docker container to run periodic backups of a mapped folder to a Git repository",
   "main": "backup.js",
   "scripts": {
-    "backup": "node backup.js"
+    "backup": "node backup.js",
+    "start": "node backup.js"
   },
-  "keywords": ["git", "backup", "docker", "automation"],
+  "keywords": [
+    "git",
+    "backup",
+    "docker",
+    "automation"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "node-cron": "^4.2.1",
     "simple-git": "^3.22.0"
   }
 }
