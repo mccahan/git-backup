@@ -46,24 +46,23 @@ async function runBackup() {
 
     let repoGit;
 
-    // Clone or update the repository
+    // Remove existing repository directory if it exists to ensure fresh clone
     console.log('Checking repository status');
-    if (!fs.existsSync(path.join(config.repoDir, '.git'))) {
-      console.log(`Cloning repository: ${config.repoUrl}`);
-      await simpleGit().clone(config.repoUrl, config.repoDir);
-      repoGit = simpleGit(config.repoDir);
-      console.log(`Repository cloned to ${config.repoDir}`);
-      // Try to checkout the branch, create if doesn't exist
-      try {
-        await repoGit.checkout(config.branch);
-      } catch (error) {
-        await repoGit.checkoutLocalBranch(config.branch);
-      }
-    } else {
-      console.log('Repository exists, fetching latest changes');
-      repoGit = simpleGit(config.repoDir);
-      await repoGit.fetch('origin');
-      // Don't merge - we only push local changes
+    if (fs.existsSync(config.repoDir)) {
+      console.log('Removing existing repository directory for fresh clone');
+      fs.rmSync(config.repoDir, { recursive: true, force: true });
+    }
+
+    // Clone the repository fresh
+    console.log(`Cloning repository: ${config.repoUrl}`);
+    await simpleGit().clone(config.repoUrl, config.repoDir);
+    repoGit = simpleGit(config.repoDir);
+    console.log(`Repository cloned to ${config.repoDir}`);
+    // Try to checkout the branch, create if doesn't exist
+    try {
+      await repoGit.checkout(config.branch);
+    } catch (error) {
+      await repoGit.checkoutLocalBranch(config.branch);
     }
 
     console.log("Setting git user.name to:", config.userName);
