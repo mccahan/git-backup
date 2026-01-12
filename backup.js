@@ -49,6 +49,10 @@ async function runBackup() {
     // Remove existing repository directory if it exists to ensure fresh clone
     console.log('Checking repository status');
     if (fs.existsSync(config.repoDir)) {
+      // Validate that we're only deleting the expected repository directory
+      if (config.repoDir !== '/repo') {
+        throw new Error(`Unexpected repoDir value: ${config.repoDir}. Expected: /repo`);
+      }
       console.log('Removing existing repository directory for fresh clone');
       fs.rmSync(config.repoDir, { recursive: true, force: true });
     }
