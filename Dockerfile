@@ -29,8 +29,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # Make scripts executable
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Install GitHub Copilot CLI
-RUN npm install -g @githubnext/github-copilot-cli
+RUN curl -fsSL https://gh.io/copilot-install | bash
 
 # Set working directory
 WORKDIR /backup
