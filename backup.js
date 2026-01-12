@@ -66,13 +66,12 @@ async function runBackup() {
       // Don't merge - we only push local changes
     }
 
-    const git = simpleGit();
     console.log("Setting git user.name to:", config.userName);
-    await git.addConfig('user.name', config.userName);
+    await repoGit.addConfig('user.name', config.userName);
     console.log("Setting git user.email to:", config.userEmail);
-    await git.addConfig('user.email', config.userEmail);
+    await repoGit.addConfig('user.email', config.userEmail);
     console.log("Setting git init.defaultBranch to:", config.branch);
-    await git.addConfig('init.defaultBranch', config.branch);
+    await repoGit.addConfig('init.defaultBranch', config.branch);
 
     // Copy files from backup directory to repo (excluding .git)
     const targetDir = config.repoSubdir 
