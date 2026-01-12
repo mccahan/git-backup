@@ -15,14 +15,15 @@ This repository contains a Docker container that automatically backs up local di
 
 2. **backup.js** (Node.js application)
    - Uses `simple-git` library for Git operations
+   - Uses `node-cron` for scheduling backups
    - Implements secure file synchronization with rsync
    - Uses GitHub Copilot CLI to automatically commit changes with AI-generated messages
    - Prevents command injection vulnerabilities
+   - Can run in one-time mode or scheduled mode
 
 3. **entrypoint.sh** (Container initialization)
    - Configures GitHub CLI authentication
-   - Sets up cron scheduling
-   - Runs initial backup on container start
+   - Runs the Node.js scheduler as the primary process
 
 4. **GitHub Actions Workflow**
    - Automatically builds and publishes images to GHCR
@@ -33,7 +34,7 @@ This repository contains a Docker container that automatically backs up local di
 
 ### 1. Scheduled Automated Backups
 - Configurable backup interval (default: 6 hours)
-- Uses Alpine's `crond` for scheduling
+- Uses Node.js `node-cron` library for scheduling
 - Immediate backup on container start
 
 ### 2. AI-Powered Commit Messages
@@ -113,7 +114,7 @@ services:
 3. **Dependency Security**
    - All dependencies scanned for known vulnerabilities
    - CodeQL analysis shows no security issues
-   - Minimal dependencies (only simple-git for production)
+   - Minimal dependencies (simple-git and node-cron for production)
 
 ## Requirements Fulfilled
 

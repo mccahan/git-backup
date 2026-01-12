@@ -62,7 +62,7 @@ docker-compose up -d
 3. **Detect Changes**: Git checks for any modifications, additions, or deletions
 4. **AI Commit**: If changes are detected, GitHub Copilot CLI analyzes the changes and performs the commit with an intelligent message
 5. **Push**: Changes are pushed to the remote repository
-6. **Schedule**: The process repeats every X hours based on `BACKUP_INTERVAL_HOURS`
+6. **Schedule**: The process repeats every X hours based on `BACKUP_INTERVAL_HOURS` using a Node.js cron scheduler
 
 ## Creating a GitHub Token
 
