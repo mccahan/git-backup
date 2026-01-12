@@ -25,7 +25,7 @@ if (!config.repoUrl) {
 // Add GITHUB_TOKEN to the repo URL if it's an HTTPS URL
 if (config.repoUrl.startsWith('https://') && process.env.GITHUB_TOKEN) {
   const url = new URL(config.repoUrl);
-  // GitHub requires the token as the username with 'x-access-token' or just the token alone
+  // GitHub accepts the token directly as the username (with empty password)
   url.username = process.env.GITHUB_TOKEN;
   url.password = ''; // Can be empty when using token as username
   config.repoUrl = url.toString();
@@ -98,6 +98,10 @@ async function runBackup() {
       // Check if .gitignore exists in backup directory and use it for exclusions
       const gitignorePath = path.join(config.backupDir, '.gitignore');
       if (fs.existsSync(gitignorePath)) {
+        // Validate path to prevent shell injection
+        if (gitignorePath.includes('"') || gitignorePath.includes("'") || gitignorePath.includes(';') || gitignorePath.includes('|')) {
+          throw new Error('Invalid .gitignore path: contains potentially dangerous characters');
+        }
         console.log('Found .gitignore, using it to exclude files');
         rsyncArgs.push(`--exclude-from=${gitignorePath}`);
       }
