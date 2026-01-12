@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  git-backup:
+    image: ghcr.io/mccahan/git-backup:latest
+    container_name: git-backup
+    environment:
+      # Required: Git repository URL to backup to
+      - GIT_REPO_URL=https://github.com/yourusername/your-backup-repo.git
+      
+      # Required: GitHub token for authentication and Copilot access
+      - GITHUB_TOKEN=your_github_token_here
+      
+      # Optional: Git branch (default: main)
+      - GIT_BRANCH=main
+      
+      # Optional: Backup interval in hours (default: 6)
+      - BACKUP_INTERVAL_HOURS=6
+      
+      # Optional: Git user configuration
+      - GIT_USER_NAME=Git Backup Bot
+      - GIT_USER_EMAIL=gitbackup@example.com
+      
+      # Optional: Subdirectory within the repository to sync to (e.g., "servers/web01")
+      # - REPO_SUBDIR=
+    volumes:
+      # Mount the directory you want to backup
+      - /path/to/your/data:/backup
+    restart: unless-stopped
