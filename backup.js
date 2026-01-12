@@ -109,13 +109,8 @@ async function runBackup() {
     // Stage all changes
     await repoGit.add('.');
 
-    // Use GitHub Copilot CLI to commit changes
-    const committed = await commitWithCopilot(repoGit);
-
-    if (!committed) {
-      console.log('Copilot commit failed, nothing to push');
-      return;
-    }
+    // Use GitHub Copilot CLI to commit changes (with fallback)
+    await commitWithCopilot(repoGit);
 
     // Push changes
     console.log('Pushing changes to remote repository');
@@ -157,7 +152,6 @@ async function commitWithCopilot(repoGit) {
     
     console.log('Copilot successfully committed changes');
     console.log('Output:', result.stdout);
-    return true;
   } catch (error) {
     console.log('Copilot unavailable or failed, using fallback commit:', error.message);
     
@@ -165,7 +159,6 @@ async function commitWithCopilot(repoGit) {
     const fallbackMessage = `Backup: ${new Date().toISOString()}`;
     console.log(`Committing with fallback message: ${fallbackMessage}`);
     await repoGit.commit(fallbackMessage);
-    return true;
   }
 }
 
