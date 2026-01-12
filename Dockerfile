@@ -1,13 +1,14 @@
 FROM node:25-slim
 
 # Install required packages
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     bash \
     curl \
     rsync \
     ca-certificates \
-    github-cli
+    gh && \
+    rm -rf /var/lib/apt/lists/*
 
 # Create directories
 RUN mkdir -p /backup /repo
@@ -25,9 +26,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # Make scripts executable
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Install GitHub Copilot CLI extension
-# Note: This requires network access and may fail in restricted environments
-RUN npm install -g @github/copilot
+RUN wget -qO- https://gh.io/copilot-install | bash
 
 # Set working directory
 WORKDIR /backup
