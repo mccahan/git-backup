@@ -133,45 +133,33 @@ async function commitWithCopilot(repoGit) {
   try {
     console.log('Using GitHub Copilot CLI to commit changes...');
     
-    // Change to the repo directory so git commands work
-    const originalCwd = process.cwd();
-    process.chdir(config.repoDir);
+    // Use the new copilot CLI to perform the commit
+    // The --allow-tool flag allows copilot to execute git commands
+    const { spawnSync } = require('child_process');
+    const result = spawnSync('copilot', [
+      '-p',
+      'git commit with message summarizing these changes',
+      '--allow-tool',
+      'shell(git:*)'
+    ], { 
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: config.repoDir
+    });
     
-    try {
-      // Use the new copilot CLI to perform the commit
-      // The --allow-tool flag allows copilot to execute git commands
-      const { spawnSync } = require('child_process');
-      const result = spawnSync('copilot', [
-        '-p',
-        'git commit with message summarizing these changes',
-        '--allow-tool',
-        'shell(git:*)'
-      ], { 
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-      
-      // Restore original directory
-      process.chdir(originalCwd);
-      
-      if (result.error) {
-        throw result.error;
-      }
-      
-      if (result.status !== 0) {
-        console.log('Copilot output:', result.stdout);
-        console.log('Copilot stderr:', result.stderr);
-        throw new Error(`Copilot exited with code ${result.status}`);
-      }
-      
-      console.log('Copilot successfully committed changes');
-      console.log('Output:', result.stdout);
-      return true;
-    } catch (innerError) {
-      // Restore original directory on error
-      process.chdir(originalCwd);
-      throw innerError;
+    if (result.error) {
+      throw result.error;
     }
+    
+    if (result.status !== 0) {
+      console.log('Copilot output:', result.stdout);
+      console.log('Copilot stderr:', result.stderr);
+      throw new Error(`Copilot exited with code ${result.status}`);
+    }
+    
+    console.log('Copilot successfully committed changes');
+    console.log('Output:', result.stdout);
+    return true;
   } catch (error) {
     console.log('Copilot unavailable or failed, using fallback commit:', error.message);
     
