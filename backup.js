@@ -27,6 +27,9 @@ if (config.repoUrl.startsWith('https://') && process.env.GITHUB_TOKEN) {
   const url = new URL(config.repoUrl);
   url.password = process.env.GITHUB_TOKEN;
   config.repoUrl = url.toString();
+
+  console.log('Using GITHUB_TOKEN for authentication in repository URL');
+  console.log("Full URL", config.repoUrl);
 }
 
 console.log(`=== Git Backup Started at ${new Date().toISOString()} ===`);
