@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { execSync } = require('child_process');
+const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const simpleGit = require('simple-git');
@@ -75,7 +75,6 @@ async function runBackup() {
     console.log(`Copying files from ${config.backupDir} to ${targetDir}`);
     try {
       // Use array form to avoid shell injection
-      const { spawnSync } = require('child_process');
       const result = spawnSync('rsync', [
         '-av',
         '--delete',
@@ -135,7 +134,6 @@ async function commitWithCopilot(repoGit) {
     
     // Use the new copilot CLI to perform the commit
     // The --allow-tool flag allows copilot to execute git commands
-    const { spawnSync } = require('child_process');
     const result = spawnSync('copilot', [
       '-p',
       'git commit with message summarizing these changes',
