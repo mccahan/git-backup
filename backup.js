@@ -44,8 +44,11 @@ async function runBackup() {
     // Initialize git with configuration
     console.log('Configuring Git user');
     const git = simpleGit();
+    console.log("Setting git user.name to:", config.userName);
     await git.addConfig('user.name', config.userName);
+    console.log("Setting git user.email to:", config.userEmail);
     await git.addConfig('user.email', config.userEmail);
+    console.log("Setting git init.defaultBranch to:", config.branch);
     await git.addConfig('init.defaultBranch', config.branch);
 
     let repoGit;
