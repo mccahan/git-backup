@@ -4,6 +4,7 @@ const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const simpleGit = require('simple-git');
+const cron = require('node-cron');
 
 // Environment variables with defaults
 const config = {
@@ -14,6 +15,7 @@ const config = {
   repoSubdir: process.env.REPO_SUBDIR || '', // Subdirectory within the repo to sync to
   userName: process.env.GIT_USER_NAME || 'Git Backup Bot',
   userEmail: process.env.GIT_USER_EMAIL || 'gitbackup@example.com',
+  backupIntervalHours: parseInt(process.env.BACKUP_INTERVAL_HOURS) || 6,
 };
 
 // Validate required configuration
@@ -190,5 +192,45 @@ async function commitWithCopilot(repoGit) {
   }
 }
 
-// Run the backup
-runBackup();
+// Main execution
+// Check if we're running in scheduled mode or one-time mode
+const isScheduledMode = process.argv.includes('--schedule') || process.env.RUN_SCHEDULER === 'true';
+
+if (isScheduledMode) {
+  console.log('=== Git Backup Scheduler Starting ===');
+  console.log(`Backup interval: ${config.backupIntervalHours} hours`);
+  
+  // Run initial backup immediately
+  console.log('Running initial backup...');
+  runBackup().catch(error => {
+    console.error('Initial backup failed:', error.message);
+  });
+  
+  // Schedule periodic backups
+  // Convert hours to cron expression: "0 */N * * *" for every N hours
+  const cronExpression = `0 */${config.backupIntervalHours} * * *`;
+  console.log(`Scheduling backups with cron expression: ${cronExpression}`);
+  
+  cron.schedule(cronExpression, () => {
+    console.log('\n=== Scheduled Backup Starting ===');
+    runBackup().catch(error => {
+      console.error('Scheduled backup failed:', error.message);
+    });
+  });
+  
+  console.log('Scheduler running. Press Ctrl+C to stop.');
+  
+  // Keep the process running
+  process.on('SIGTERM', () => {
+    console.log('Received SIGTERM, shutting down gracefully...');
+    process.exit(0);
+  });
+  
+  process.on('SIGINT', () => {
+    console.log('Received SIGINT, shutting down gracefully...');
+    process.exit(0);
+  });
+} else {
+  // One-time backup mode (original behavior)
+  runBackup();
+}

@@ -38,20 +38,7 @@ echo "  Backup Directory: ${BACKUP_DIR:-/backup}"
 git config --global user.name "${GIT_USER_NAME}"
 git config --global user.email "${GIT_USER_EMAIL}"
 
-# Create log file
-touch /var/log/backup.log
-
-# Run immediate backup
-echo "Running initial backup..."
-node /usr/local/bin/backup.js 2>&1 | tee -a /var/log/backup.log
-
-# Setup cron job for periodic backups
-CRON_SCHEDULE="0 */$BACKUP_INTERVAL_HOURS * * *"
-echo "$CRON_SCHEDULE node /usr/local/bin/backup.js >> /var/log/backup.log 2>&1" > /etc/crontabs/root
-
-echo "Cron job scheduled: $CRON_SCHEDULE"
-echo "Starting crond daemon..."
-
-# Start crond in foreground and tail logs
-crond -f -l 2 &
-tail -f /var/log/backup.log
+# Run Node.js scheduler
+echo "Starting Node.js scheduler..."
+export RUN_SCHEDULER=true
+exec node /usr/local/bin/backup.js --schedule

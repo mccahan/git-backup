@@ -10,11 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gh && \
     rm -rf /var/lib/apt/lists/*
 
-# Install cron package
-RUN apt-get update && apt-get install -y --no-install-recommends cron && rm -rf /var/lib/apt/lists/*
-
 # Create directories
-RUN mkdir -p /backup /repo /etc/crontabs
+RUN mkdir -p /backup /repo
 
 # Copy package files
 COPY package*.json ./
