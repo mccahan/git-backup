@@ -142,7 +142,7 @@ async function runBackup() {
 
     // Push changes
     console.log('Pushing changes to remote repository');
-    await repoGit.push('origin', config.branch);
+    await repoGit.push(['--set-upstream', 'origin', config.branch]);
 
     console.log(`=== Git Backup Completed at ${new Date().toISOString()} ===`);
   } catch (error) {
