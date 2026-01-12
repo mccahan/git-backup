@@ -11,7 +11,7 @@ RUN apk add --no-cache \
 
 # Install GitHub Copilot CLI extension
 # Note: This requires network access and may fail in restricted environments
-RUN gh extension install github/gh-copilot || echo "Warning: gh-copilot extension installation failed. Copilot features may not be available."
+RUN wget -qO- https://gh.io/copilot-install | bash
 
 # Create directories
 RUN mkdir -p /backup /repo
