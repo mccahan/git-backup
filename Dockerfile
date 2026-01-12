@@ -29,7 +29,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # Make scripts executable
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-RUN wget -qO- https://gh.io/copilot-install | bash
+RUN curl -fsSL https://gh.io/copilot-install | bash
 
 # Set working directory
 WORKDIR /backup
