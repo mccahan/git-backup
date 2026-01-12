@@ -6,7 +6,7 @@ Docker container to run periodic backups of a mapped folder to a Git repository 
 
 - 🔄 Automated periodic backups on a configurable schedule
 - 🤖 AI-powered commit messages using GitHub Copilot CLI
-- 🐳 Lightweight Alpine-based Docker image
+- 🐳 Lightweight Node.js-based Docker image
 - 📦 Published to GitHub Container Registry
 - ⚡ One-way sync: only local changes are pushed to the remote repository
 - 🔧 Configurable backup intervals and Git settings
@@ -60,8 +60,8 @@ docker-compose up -d
 1. **Initial Setup**: On container start, the repository is cloned (or fetched if it exists)
 2. **Sync Files**: Files from the mounted `/backup` volume are copied to the local repository
 3. **Detect Changes**: Git checks for any modifications, additions, or deletions
-4. **Generate Commit Message**: If changes are detected, GitHub Copilot generates an intelligent commit message based on the diff
-5. **Commit & Push**: Changes are committed and pushed to the remote repository
+4. **AI Commit**: If changes are detected, GitHub Copilot CLI analyzes the changes and performs the commit with an intelligent message
+5. **Push**: Changes are pushed to the remote repository
 6. **Schedule**: The process repeats every X hours based on `BACKUP_INTERVAL_HOURS`
 
 ## Creating a GitHub Token
@@ -133,7 +133,7 @@ docker run -d \
   git-backup
 ```
 
-**Note**: The Docker build requires access to Alpine package repositories. If building in a restricted environment, you may need to configure appropriate network access or use a Docker registry mirror.
+**Note**: The Docker build requires access to npm registry and Debian package repositories. If building in a restricted environment, you may need to configure appropriate network access or use a Docker registry mirror.
 
 ## Published Images
 

@@ -8,15 +8,15 @@ This repository contains a Docker container that automatically backs up local di
 
 ### Components
 
-1. **Dockerfile** (`node:20-alpine` base)
-   - Minimal Alpine Linux image with Node.js 20
+1. **Dockerfile** (`node:25-slim` base)
+   - Slim Node.js 25 image
    - Includes: git, bash, curl, rsync, ca-certificates, github-cli
-   - GitHub Copilot CLI extension for AI commit messages
+   - GitHub Copilot CLI installed via npm (@githubnext/github-copilot-cli)
 
 2. **backup.js** (Node.js application)
    - Uses `simple-git` library for Git operations
    - Implements secure file synchronization with rsync
-   - Generates commit messages via GitHub Copilot CLI
+   - Uses GitHub Copilot CLI to automatically commit changes with AI-generated messages
    - Prevents command injection vulnerabilities
 
 3. **entrypoint.sh** (Container initialization)
@@ -37,8 +37,9 @@ This repository contains a Docker container that automatically backs up local di
 - Immediate backup on container start
 
 ### 2. AI-Powered Commit Messages
-- Uses GitHub Copilot CLI to analyze changes
-- Generates meaningful commit messages based on diff statistics
+- Uses the new GitHub Copilot CLI (`copilot` command) to analyze and commit changes
+- Copilot autonomously generates commit messages and performs the commit
+- Uses `--allow-tool 'shell(git:*)` flag to allow git command execution
 - Fallback to timestamped messages if Copilot unavailable
 
 ### 3. Subdirectory Support

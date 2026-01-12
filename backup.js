@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { execSync } = require('child_process');
+const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const simpleGit = require('simple-git');
@@ -75,7 +75,6 @@ async function runBackup() {
     console.log(`Copying files from ${config.backupDir} to ${targetDir}`);
     try {
       // Use array form to avoid shell injection
-      const { spawnSync } = require('child_process');
       const result = spawnSync('rsync', [
         '-av',
         '--delete',
@@ -110,11 +109,8 @@ async function runBackup() {
     // Stage all changes
     await repoGit.add('.');
 
-    // Generate commit message using GitHub Copilot
-    let commitMessage = await generateCommitMessage(repoGit);
-
-    console.log(`Committing with message: ${commitMessage}`);
-    await repoGit.commit(commitMessage);
+    // Use GitHub Copilot CLI to commit changes (with fallback)
+    await commitWithCopilot(repoGit);
 
     // Push changes
     console.log('Pushing changes to remote repository');
@@ -127,65 +123,42 @@ async function runBackup() {
   }
 }
 
-async function generateCommitMessage(repoGit) {
+async function commitWithCopilot(repoGit) {
   try {
-    // Get diff stats for context
-    const diffStat = await repoGit.diff(['--cached', '--stat']);
+    console.log('Using GitHub Copilot CLI to commit changes...');
     
-    console.log('Generating commit message with GitHub Copilot...');
+    // Use the new copilot CLI to perform the commit
+    // The --allow-tool flag allows copilot to execute git commands
+    const result = spawnSync('copilot', [
+      '-p',
+      'git commit with message summarizing these changes',
+      '--allow-tool',
+      'shell(git:*)'
+    ], { 
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: config.repoDir
+    });
     
-    // Write diff to a temporary file to avoid command injection
-    const tmpFile = '/tmp/diff-stat.txt';
-    fs.writeFileSync(tmpFile, diffStat);
-    
-    try {
-      // Use GitHub Copilot to generate commit message
-      // Pass the diff via stdin instead of command line to avoid injection
-      const { spawnSync } = require('child_process');
-      const result = spawnSync('sh', ['-c', 
-        `cat "${tmpFile}" | gh copilot suggest -t shell "git commit with message summarizing these changes"`
-      ], { 
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe']
-      });
-      
-      // Clean up temp file
-      try {
-        fs.unlinkSync(tmpFile);
-      } catch (e) {
-        // Ignore cleanup errors
-      }
-      
-      if (result.error) {
-        throw result.error;
-      }
-      
-      const output = result.stdout || '';
-      
-      // Extract commit message from Copilot output
-      // Look for pattern: git commit -m "message" or git commit -m 'message'
-      const doubleQuoteMatch = output.match(/git commit -m "([^"]+)"/);
-      const singleQuoteMatch = output.match(/git commit -m '([^']+)'/);
-      
-      const match = doubleQuoteMatch || singleQuoteMatch;
-      
-      if (match && match[1]) {
-        return match[1];
-      }
-      
-      throw new Error('Could not parse Copilot response');
-    } catch (parseError) {
-      // Clean up temp file on error
-      try {
-        fs.unlinkSync(tmpFile);
-      } catch (e) {
-        // Ignore cleanup errors
-      }
-      throw parseError;
+    if (result.error) {
+      throw result.error;
     }
+    
+    if (result.status !== 0) {
+      console.log('Copilot output:', result.stdout);
+      console.log('Copilot stderr:', result.stderr);
+      throw new Error(`Copilot exited with code ${result.status}`);
+    }
+    
+    console.log('Copilot successfully committed changes');
+    console.log('Output:', result.stdout);
   } catch (error) {
-    console.log('Copilot unavailable or failed, using fallback message:', error.message);
-    return `Backup: ${new Date().toISOString()}`;
+    console.log('Copilot unavailable or failed, using fallback commit:', error.message);
+    
+    // Fallback to manual commit with timestamp
+    const fallbackMessage = `Backup: ${new Date().toISOString()}`;
+    console.log(`Committing with fallback message: ${fallbackMessage}`);
+    await repoGit.commit(fallbackMessage);
   }
 }
 
