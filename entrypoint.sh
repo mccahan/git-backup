@@ -34,6 +34,9 @@ echo "  Branch: ${GIT_BRANCH:-main}"
 echo "  Backup Interval: $BACKUP_INTERVAL_HOURS hours"
 echo "  Backup Directory: ${BACKUP_DIR:-/backup}"
 
+git config --global user.name "${GIT_USER_NAME}"
+git config --global user.email "${GIT_USER_EMAIL}"
+
 # Create log file
 touch /var/log/backup.log
 
