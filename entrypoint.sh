@@ -23,6 +23,7 @@ if [ -n "$GITHUB_TOKEN" ]; then
     unset GITHUB_TOKEN
     gh auth login --with-token < "$TEMP_TOKEN_FILE"
     rm -f "$TEMP_TOKEN_FILE"
+    export GITHUB_TOKEN=$(gh auth token)
 fi
 
 # Set default backup interval (in hours)

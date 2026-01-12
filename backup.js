@@ -22,6 +22,13 @@ if (!config.repoUrl) {
   process.exit(1);
 }
 
+// Add GITHUB_TOKEN to the repo URL if it's an HTTPS URL
+if (config.repoUrl.startsWith('https://') && process.env.GITHUB_TOKEN) {
+  const url = new URL(config.repoUrl);
+  url.password = process.env.GITHUB_TOKEN;
+  config.repoUrl = url.toString();
+}
+
 console.log(`=== Git Backup Started at ${new Date().toISOString()} ===`);
 
 async function runBackup() {
