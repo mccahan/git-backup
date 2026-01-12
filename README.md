@@ -49,6 +49,7 @@ docker-compose up -d
 - `GIT_USER_NAME`: Git commit author name (default: `Git Backup Bot`)
 - `GIT_USER_EMAIL`: Git commit author email (default: `gitbackup@example.com`)
 - `BACKUP_DIR`: Internal backup directory path (default: `/backup`)
+- `REPO_SUBDIR`: Subdirectory within the Git repository to sync files to (default: `` - root of repository). Useful for organizing backups within a subdirectory of the repository.
 
 ### Volume Mounts
 
@@ -97,6 +98,20 @@ docker run -d \
   -e GITHUB_TOKEN=ghp_xxxxxxxxxxxx \
   -e BACKUP_INTERVAL_HOURS=24 \
   -v /home/user/Documents:/backup \
+  ghcr.io/mccahan/git-backup:latest
+```
+
+### Backup to a subdirectory within the repository
+
+This example backs up local files to the `servers/web01` subdirectory in the repository:
+
+```bash
+docker run -d \
+  -e GIT_REPO_URL=https://github.com/myuser/infrastructure-backups.git \
+  -e GITHUB_TOKEN=ghp_xxxxxxxxxxxx \
+  -e REPO_SUBDIR=servers/web01 \
+  -e GIT_USER_NAME="Web Server Backup" \
+  -v /etc/nginx:/backup \
   ghcr.io/mccahan/git-backup:latest
 ```
 

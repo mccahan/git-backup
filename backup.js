@@ -11,6 +11,7 @@ const config = {
   branch: process.env.GIT_BRANCH || 'main',
   backupDir: process.env.BACKUP_DIR || '/backup',
   repoDir: '/repo',
+  repoSubdir: process.env.REPO_SUBDIR || '', // Subdirectory within the repo to sync to
   userName: process.env.GIT_USER_NAME || 'Git Backup Bot',
   userEmail: process.env.GIT_USER_EMAIL || 'gitbackup@example.com',
 };
@@ -53,10 +54,20 @@ async function runBackup() {
     }
 
     // Copy files from backup directory to repo (excluding .git)
-    console.log(`Copying files from ${config.backupDir} to ${config.repoDir}`);
+    const targetDir = config.repoSubdir 
+      ? path.join(config.repoDir, config.repoSubdir)
+      : config.repoDir;
+    
+    // Create subdirectory if it doesn't exist
+    if (config.repoSubdir && !fs.existsSync(targetDir)) {
+      console.log(`Creating subdirectory: ${config.repoSubdir}`);
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    
+    console.log(`Copying files from ${config.backupDir} to ${targetDir}`);
     try {
       execSync(
-        `rsync -av --delete --exclude='.git' --exclude='.gitignore' "${config.backupDir}/" "${config.repoDir}/"`,
+        `rsync -av --delete --exclude='.git' --exclude='.gitignore' "${config.backupDir}/" "${targetDir}/"`,
         { stdio: 'inherit' }
       );
     } catch (error) {

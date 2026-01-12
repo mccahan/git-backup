@@ -20,6 +20,9 @@ services:
       # Optional: Git user configuration
       - GIT_USER_NAME=Git Backup Bot
       - GIT_USER_EMAIL=gitbackup@example.com
+      
+      # Optional: Subdirectory within the repository to sync to (e.g., "servers/web01")
+      # - REPO_SUBDIR=
     volumes:
       # Mount the directory you want to backup
       - /path/to/your/data:/backup
