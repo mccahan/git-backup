@@ -25,11 +25,14 @@ if (!config.repoUrl) {
 // Add GITHUB_TOKEN to the repo URL if it's an HTTPS URL
 if (config.repoUrl.startsWith('https://') && process.env.GITHUB_TOKEN) {
   const url = new URL(config.repoUrl);
-  url.password = process.env.GITHUB_TOKEN;
+  // GitHub accepts the token directly as the username (with empty password)
+  url.username = process.env.GITHUB_TOKEN;
+  url.password = ''; // Can be empty when using token as username
   config.repoUrl = url.toString();
 
   console.log('Using GITHUB_TOKEN for authentication in repository URL');
-  console.log("Full URL", config.repoUrl);
+  // Don't log the full URL as it contains the token
+  console.log('Repository URL configured with authentication token');
 }
 
 console.log(`=== Git Backup Started at ${new Date().toISOString()} ===`);
@@ -84,15 +87,30 @@ async function runBackup() {
     
     console.log(`Copying files from ${config.backupDir} to ${targetDir}`);
     try {
-      // Use array form to avoid shell injection
-      const result = spawnSync('rsync', [
+      // Build rsync arguments
+      const rsyncArgs = [
         '-av',
         '--delete',
         '--exclude=.git',
-        '--exclude=.gitignore',
-        `${config.backupDir}/`,
-        `${targetDir}/`
-      ], { stdio: 'inherit' });
+        '--exclude=.gitignore'
+      ];
+      
+      // Check if .gitignore exists in backup directory and use it for exclusions
+      const gitignorePath = path.join(config.backupDir, '.gitignore');
+      if (fs.existsSync(gitignorePath)) {
+        // Validate path to prevent shell injection
+        if (gitignorePath.includes('"') || gitignorePath.includes("'") || gitignorePath.includes(';') || gitignorePath.includes('|')) {
+          throw new Error('Invalid .gitignore path: contains potentially dangerous characters');
+        }
+        console.log('Found .gitignore, using it to exclude files');
+        rsyncArgs.push(`--exclude-from=${gitignorePath}`);
+      }
+      
+      rsyncArgs.push(`${config.backupDir}/`);
+      rsyncArgs.push(`${targetDir}/`);
+      
+      // Use array form to avoid shell injection
+      const result = spawnSync('rsync', rsyncArgs, { stdio: 'inherit' });
       
       if (result.error) {
         throw result.error;
