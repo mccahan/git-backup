@@ -35,6 +35,9 @@ services:
       # Optional: Config and history file paths
       # - CONFIG_FILE=/data/config.json
       # - HISTORY_FILE=/data/history.json
+
+      # Optional: Restore config from repo on fresh container (path within repo)
+      # - CONFIG_BACKUP_PATH=git-backup-config.json
     volumes:
       # Mount the directory you want to backup
       - /path/to/your/data:/backup

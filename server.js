@@ -12,6 +12,7 @@ const { buildCommitUrl } = require('./github');
 
 const PORT = parseInt(process.env.WEB_UI_PORT) || 3000;
 const BASE_PATH = (process.env.BASE_PATH || '').replace(/\/+$/, '');
+const CONFIG_BACKUP_PATH = process.env.CONFIG_BACKUP_PATH || '';
 
 const globalConfig = getGlobalConfig();
 
@@ -29,6 +30,51 @@ function safeRepoUrl() {
   }
 }
 
+function restoreConfigFromRepo(repoDir) {
+  // If an explicit path is configured, try that first
+  const explicit = CONFIG_BACKUP_PATH || '';
+  if (explicit) {
+    const fullPath = path.join(repoDir, explicit);
+    if (fs.existsSync(fullPath)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(fullPath, 'utf-8'));
+        if (Array.isArray(data.mappings)) {
+          const dir = path.dirname(CONFIG_FILE);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          fs.copyFileSync(fullPath, CONFIG_FILE);
+          console.log(`Restored config from repo: ${explicit}`);
+          return true;
+        }
+      } catch { /* not valid config, fall through */ }
+    }
+  }
+
+  // Auto-discover: scan repo root for *.json files containing a mappings array
+  try {
+    const entries = fs.readdirSync(repoDir);
+    for (const entry of entries) {
+      if (!entry.endsWith('.json')) continue;
+      const fullPath = path.join(repoDir, entry);
+      try {
+        const stat = fs.statSync(fullPath);
+        if (!stat.isFile()) continue;
+        const data = JSON.parse(fs.readFileSync(fullPath, 'utf-8'));
+        if (Array.isArray(data.mappings) && data.mappings.length > 0 && data.mappings[0].sourceDir) {
+          const dir = path.dirname(CONFIG_FILE);
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+          fs.copyFileSync(fullPath, CONFIG_FILE);
+          console.log(`Auto-discovered and restored config from repo: ${entry}`);
+          return true;
+        }
+      } catch { /* skip unparseable files */ }
+    }
+  } catch (err) {
+    console.error('Config auto-discovery failed:', err.message);
+  }
+
+  return false;
+}
+
 async function runFullBackup(mappingId) {
   if (backupInProgress) throw new Error('Backup already in progress');
   backupInProgress = true;
@@ -40,6 +86,17 @@ async function runFullBackup(mappingId) {
     globalConfig.globalIgnorePatterns = settings.globalIgnorePatterns || [];
 
     const repoGit = await prepareRepo(globalConfig);
+
+    // Restore config from repo on first run if local config doesn't exist
+    if (!fs.existsSync(CONFIG_FILE)) {
+      const restored = restoreConfigFromRepo(globalConfig.repoDir);
+      if (restored) {
+        // Re-read settings since config was just restored
+        const restoredSettings = getSettings();
+        globalConfig.globalIgnorePatterns = restoredSettings.globalIgnorePatterns || [];
+      }
+    }
+
     let mappings = getMappings().filter((m) => m.enabled);
 
     if (mappingId) {
