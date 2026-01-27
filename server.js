@@ -160,7 +160,7 @@ async function runFullBackup(mappingId) {
           // Use Copilot to generate a description of the mapping contents
           let description = '';
           try {
-            const prompt = `Look at the files in the directory "${targetDir}" and write a concise Markdown description (can include sentences, lists of features or notable tools like Docker images/projects, etc) of what this project or directory contains. Describe the purpose of the application or configuration, key technologies used, and notable files. Do not include any thinking or general information about the backup process.Output ONLY the Markdown text, no code fences.`;
+            const prompt = `Look at the files in the directory "${targetDir}" and write a concise Markdown description (can include sentences, lists of features or notable tools like Docker images/projects, etc) of what this project or directory contains. Describe the purpose of the application or configuration, key technologies used, and notable files. Do not include any thinking or general information about the backup process. Output ONLY the Markdown text, no code fences, no tool runs.`;
             console.log(`[${m.name}] Generating README description via Copilot...`);
             const result = spawnSync(
               'copilot',
