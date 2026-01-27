@@ -169,7 +169,11 @@ async function runFullBackup(mappingId) {
             );
             if (result.error) throw result.error;
             if (result.status !== 0) throw new Error(`Copilot exited with code ${result.status}`);
-            const output = (result.stdout || '').trim();
+            const output = (result.stdout || '')
+              .split('\n')
+              .filter((line) => !/^[✓✗◒⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]\s/.test(line) && !/^\s+[└├│]/.test(line))
+              .join('\n')
+              .trim();
             if (output) {
               description = output;
               console.log(`[${m.name}] Copilot description generated`);
