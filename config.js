@@ -67,6 +67,7 @@ function addMapping({ name, sourceDir, repoSubdir }) {
     sourceDir,
     repoSubdir,
     enabled: true,
+    ignorePatterns: [],
   };
   cfg.mappings.push(mapping);
   saveConfig(cfg);
@@ -86,7 +87,7 @@ function updateMapping(id, updates) {
     throw new Error(`A mapping with repoSubdir "${updates.repoSubdir}" already exists`);
   }
 
-  const allowed = ['name', 'sourceDir', 'repoSubdir', 'enabled'];
+  const allowed = ['name', 'sourceDir', 'repoSubdir', 'enabled', 'ignorePatterns'];
   for (const key of allowed) {
     if (updates[key] !== undefined) {
       cfg.mappings[idx][key] = updates[key];

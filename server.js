@@ -35,6 +35,10 @@ async function runFullBackup(mappingId) {
 
   const results = [];
   try {
+    // Attach global ignore patterns so backup.js can use them
+    const settings = getSettings();
+    globalConfig.globalIgnorePatterns = settings.globalIgnorePatterns || [];
+
     const repoGit = await prepareRepo(globalConfig);
     let mappings = getMappings().filter((m) => m.enabled);
 
@@ -69,7 +73,6 @@ async function runFullBackup(mappingId) {
     }
 
     // Back up config.json into the repo if configured
-    const settings = getSettings();
     if (settings.configBackupPath && fs.existsSync(CONFIG_FILE)) {
       try {
         const destPath = path.join(globalConfig.repoDir, settings.configBackupPath);

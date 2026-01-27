@@ -47,8 +47,9 @@
   .modal h3 { margin-bottom: 16px; }
   .form-group { margin-bottom: 14px; }
   .form-group label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
-  .form-group input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
-    padding: 8px 10px; border-radius: 6px; font-size: 0.85rem; }
+  .form-group input, .form-group textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 6px; font-size: 0.85rem; font-family: inherit; }
+  .form-group textarea { resize: vertical; min-height: 60px; }
   .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 
   .truncate { max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: bottom; }
@@ -105,6 +106,11 @@
     <div class="form-group"><label>Name</label><input id="fName" placeholder="e.g. Web Server"></div>
     <div class="form-group"><label>Source Directory</label><input id="fSourceDir" placeholder="e.g. /backup"></div>
     <div class="form-group"><label>Repo Subdirectory</label><input id="fRepoSubdir" placeholder="e.g. servers/web01 (leave empty for root)"></div>
+    <div class="form-group">
+      <label>Ignore Patterns</label>
+      <textarea id="fIgnorePatterns" rows="3" placeholder="*.log&#10;node_modules/&#10;.DS_Store"></textarea>
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">One rsync exclude pattern per line. Applied in addition to global patterns.</div>
+    </div>
     <input type="hidden" id="fId">
     <div class="form-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -122,6 +128,13 @@
       <input id="fConfigBackupPath" placeholder="e.g. git-backup-config.json (leave empty to disable)">
       <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">
         When set, config.json is committed to this path in the repo after each backup run.
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Global Ignore Patterns</label>
+      <textarea id="fGlobalIgnore" rows="4" placeholder="*.log&#10;node_modules/&#10;.DS_Store"></textarea>
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">
+        One pattern per line. Applied to all mappings. Written as .gitignore in each target directory.
       </div>
     </div>
     <div class="form-actions">
@@ -176,6 +189,7 @@ async function loadStatus() {
 function openSettingsModal() {
   api('/settings').then(s => {
     document.getElementById('fConfigBackupPath').value = s.configBackupPath || '';
+    document.getElementById('fGlobalIgnore').value = (s.globalIgnorePatterns || []).join('\n');
     document.getElementById('settingsOverlay').classList.add('open');
   });
 }
@@ -183,11 +197,13 @@ function closeSettingsModal() { document.getElementById('settingsOverlay').class
 
 async function saveSettings() {
   const configBackupPath = document.getElementById('fConfigBackupPath').value.trim();
+  const globalIgnorePatterns = document.getElementById('fGlobalIgnore').value
+    .split('\n').map(l => l.trim()).filter(Boolean);
   try {
     await api('/settings', {
       method: 'PUT',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ configBackupPath: configBackupPath || '' }),
+      body: JSON.stringify({ configBackupPath: configBackupPath || '', globalIgnorePatterns }),
     });
     closeSettingsModal();
     loadStatus();
@@ -271,6 +287,7 @@ function openModal(m) {
   document.getElementById('fName').value = m ? m.name : '';
   document.getElementById('fSourceDir').value = m ? m.sourceDir : '';
   document.getElementById('fRepoSubdir').value = m ? m.repoSubdir : '';
+  document.getElementById('fIgnorePatterns').value = m && m.ignorePatterns ? m.ignorePatterns.join('\n') : '';
   document.getElementById('modalOverlay').classList.add('open');
 }
 function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
@@ -286,6 +303,8 @@ async function saveMapping() {
     name: document.getElementById('fName').value,
     sourceDir: document.getElementById('fSourceDir').value,
     repoSubdir: document.getElementById('fRepoSubdir').value,
+    ignorePatterns: document.getElementById('fIgnorePatterns').value
+      .split('\n').map(l => l.trim()).filter(Boolean),
   };
   try {
     if (editingId) {

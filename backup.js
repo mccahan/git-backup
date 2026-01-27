@@ -97,6 +97,16 @@ async function runBackupForMapping(repoGit, mapping, globalConfig) {
     '--exclude=.gitignore',
   ];
 
+  // Collect all ignore patterns (global + per-mapping)
+  const globalPatterns = (globalConfig.globalIgnorePatterns || []).filter(Boolean);
+  const mappingPatterns = (mapping.ignorePatterns || []).filter(Boolean);
+  const allPatterns = [...globalPatterns, ...mappingPatterns];
+
+  for (const pattern of allPatterns) {
+    rsyncArgs.push(`--exclude=${pattern}`);
+  }
+
+  // Source dir .gitignore (from the backed-up directory itself)
   const gitignorePath = path.join(sourceDir, '.gitignore');
   if (fs.existsSync(gitignorePath)) {
     if (/["';|]/.test(gitignorePath)) {
@@ -110,6 +120,14 @@ async function runBackupForMapping(repoGit, mapping, globalConfig) {
   const rsyncResult = spawnSync('rsync', rsyncArgs, { stdio: 'inherit' });
   if (rsyncResult.error) throw rsyncResult.error;
   if (rsyncResult.status !== 0) throw new Error(`rsync exited with code ${rsyncResult.status}`);
+
+  // Write managed .gitignore into the repo target directory
+  if (allPatterns.length > 0) {
+    const gitignoreDest = path.join(targetDir, '.gitignore');
+    const content = '# Managed by git-backup\n' + allPatterns.join('\n') + '\n';
+    fs.writeFileSync(gitignoreDest, content);
+    console.log(`[${name}] Wrote .gitignore (${allPatterns.length} patterns)`);
+  }
 
   const status = await repoGit.status();
   if (status.files.length === 0) {
