@@ -2,10 +2,10 @@
   "name": "git-backup",
   "version": "1.0.0",
   "description": "Docker container to run periodic backups of a mapped folder to a Git repository",
-  "main": "backup.js",
+  "main": "server.js",
   "scripts": {
     "backup": "node backup.js",
-    "start": "node backup.js"
+    "start": "node server.js"
   },
   "keywords": [
     "git",
@@ -16,6 +16,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "express": "^5.1.0",
     "node-cron": "^4.2.1",
     "simple-git": "^3.22.0"
   }

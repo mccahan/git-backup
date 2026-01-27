@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Git Backup</title>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5; padding: 24px; max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 8px; }
+  .status-bar { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px; margin-bottom: 24px; display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+  .status-bar .item { font-size: 0.85rem; }
+  .status-bar .label { color: var(--muted); margin-right: 4px; }
+  .btn { background: var(--accent); color: #fff; border: none; padding: 6px 14px; border-radius: 6px;
+    cursor: pointer; font-size: 0.85rem; font-weight: 500; }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+  .btn-danger { background: var(--red); }
+  .btn-secondary { background: var(--border); color: var(--text); }
+  .btn-green { background: var(--green); }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+  th { color: var(--muted); font-weight: 600; background: var(--surface); }
+  tr:hover td { background: var(--surface); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .section-header h2 { font-size: 1.15rem; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 500; }
+  .badge-on { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-off { background: rgba(248,81,73,0.15); color: var(--red); }
+
+  /* Modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100;
+    justify-content: center; align-items: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 24px; width: 440px; max-width: 95vw; }
+  .modal h3 { margin-bottom: 16px; }
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+  .form-group input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 8px 10px; border-radius: 6px; font-size: 0.85rem; }
+  .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+  .truncate { max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: bottom; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { color: var(--muted); padding: 24px; text-align: center; }
+</style>
+</head>
+<body>
+
+<h1>Git Backup Dashboard</h1>
+
+<div class="status-bar" id="statusBar">
+  <div class="item"><span class="label">Repo:</span> <span id="sRepoUrl">—</span></div>
+  <div class="item"><span class="label">Branch:</span> <span id="sBranch">—</span></div>
+  <div class="item"><span class="label">Interval:</span> <span id="sInterval">—</span></div>
+  <div class="item" id="sRunning" style="display:none"><span class="spinner"></span> Backup running…</div>
+  <div style="margin-left:auto">
+    <button class="btn btn-green" id="btnBackupAll" onclick="runBackup()">Run Backup All</button>
+  </div>
+</div>
+
+<div class="section-header">
+  <h2>Mappings</h2>
+  <button class="btn" onclick="openModal()">+ Add Mapping</button>
+</div>
+<table>
+  <thead><tr>
+    <th>Name</th><th>Source</th><th>Repo Subdir</th><th>Status</th><th>Last Backup</th><th>Last Commit</th><th></th>
+  </tr></thead>
+  <tbody id="mappingsBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+</table>
+
+<div class="section-header">
+  <h2>History</h2>
+</div>
+<table>
+  <thead><tr>
+    <th>Time</th><th>Mapping</th><th>Files</th><th>Commit Message</th><th>Link</th>
+  </tr></thead>
+  <tbody id="historyBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+</table>
+<div style="text-align:center;margin-bottom:24px">
+  <button class="btn btn-secondary btn-sm" id="btnLoadMore" onclick="loadMoreHistory()" style="display:none">Load More</button>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h3 id="modalTitle">Add Mapping</h3>
+    <div class="form-group"><label>Name</label><input id="fName" placeholder="e.g. Web Server"></div>
+    <div class="form-group"><label>Source Directory</label><input id="fSourceDir" placeholder="e.g. /backup"></div>
+    <div class="form-group"><label>Repo Subdirectory</label><input id="fRepoSubdir" placeholder="e.g. servers/web01 (leave empty for root)"></div>
+    <input type="hidden" id="fId">
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="saveMapping()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const BASE = document.currentScript ? '' : '';
+// Detect base path from current page URL
+const BASE_PATH = (() => {
+  // The API is served relative to the page's base path
+  const path = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/+$/, '');
+  return path;
+})();
+
+function api(path, opts) {
+  return fetch(BASE_PATH + '/api' + path, opts).then(r => {
+    if (!r.ok) return r.json().then(e => { throw new Error(e.error || r.statusText); });
+    return r.json();
+  });
+}
+
+function relTime(iso) {
+  if (!iso) return '—';
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+function esc(s) {
+  const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML;
+}
+
+async function loadStatus() {
+  const s = await api('/status');
+  document.getElementById('sRepoUrl').textContent = s.repoUrl;
+  document.getElementById('sBranch').textContent = s.branch;
+  document.getElementById('sInterval').textContent = s.intervalHours + 'h';
+  document.getElementById('sRunning').style.display = s.backupInProgress ? '' : 'none';
+  document.getElementById('btnBackupAll').disabled = s.backupInProgress;
+}
+
+async function loadMappings() {
+  const mappings = await api('/mappings');
+  const tb = document.getElementById('mappingsBody');
+  if (mappings.length === 0) {
+    tb.innerHTML = '<tr><td colspan="7" class="empty">No mappings configured</td></tr>';
+    return;
+  }
+  tb.innerHTML = mappings.map(m => {
+    const lb = m.lastBackup;
+    const commitLink = lb && lb.commitUrl
+      ? `<a href="${esc(lb.commitUrl)}" target="_blank">${esc(lb.commitSha?.substring(0, 7))}</a>`
+      : '—';
+    const commitMsg = lb ? `<span class="truncate" title="${esc(lb.commitMessage)}">${esc(lb.commitMessage)}</span>` : '—';
+    return `<tr>
+      <td><strong>${esc(m.name)}</strong></td>
+      <td>${esc(m.sourceDir)}</td>
+      <td>${esc(m.repoSubdir || '(root)')}</td>
+      <td><span class="badge ${m.enabled ? 'badge-on' : 'badge-off'}">${m.enabled ? 'on' : 'off'}</span></td>
+      <td>${lb ? relTime(lb.timestamp) : '—'}</td>
+      <td>${commitMsg}<br>${commitLink}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm btn-secondary" onclick="editMapping('${m.id}')">Edit</button>
+        <button class="btn btn-sm btn-green" onclick="runBackup('${m.id}')">Backup</button>
+        <button class="btn btn-sm btn-danger" onclick="delMapping('${m.id}')">Del</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+let historyLimit = 20;
+async function loadHistory() {
+  const entries = await api('/history?limit=' + historyLimit);
+  const tb = document.getElementById('historyBody');
+  if (entries.length === 0) {
+    tb.innerHTML = '<tr><td colspan="5" class="empty">No backup history yet</td></tr>';
+    document.getElementById('btnLoadMore').style.display = 'none';
+    return;
+  }
+  tb.innerHTML = entries.map(e => {
+    const link = e.commitUrl
+      ? `<a href="${esc(e.commitUrl)}" target="_blank">${esc(e.commitSha?.substring(0, 7))}</a>`
+      : '—';
+    return `<tr>
+      <td>${relTime(e.timestamp)}</td>
+      <td>${esc(e.mappingName)}</td>
+      <td>${e.filesChanged ?? '—'}</td>
+      <td><span class="truncate">${esc(e.commitMessage)}</span></td>
+      <td>${link}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('btnLoadMore').style.display = entries.length >= historyLimit ? '' : 'none';
+}
+
+function loadMoreHistory() { historyLimit += 20; loadHistory(); }
+
+async function runBackup(mappingId) {
+  const btn = document.getElementById('btnBackupAll');
+  btn.disabled = true;
+  document.getElementById('sRunning').style.display = '';
+  try {
+    await api('/backup' + (mappingId ? '?mappingId=' + mappingId : ''), { method: 'POST' });
+  } catch (e) {
+    alert('Backup error: ' + e.message);
+  }
+  refresh();
+}
+
+// Modal
+let editingId = null;
+function openModal(m) {
+  editingId = m ? m.id : null;
+  document.getElementById('modalTitle').textContent = m ? 'Edit Mapping' : 'Add Mapping';
+  document.getElementById('fName').value = m ? m.name : '';
+  document.getElementById('fSourceDir').value = m ? m.sourceDir : '';
+  document.getElementById('fRepoSubdir').value = m ? m.repoSubdir : '';
+  document.getElementById('modalOverlay').classList.add('open');
+}
+function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+
+async function editMapping(id) {
+  const mappings = await api('/mappings');
+  const m = mappings.find(x => x.id === id);
+  if (m) openModal(m);
+}
+
+async function saveMapping() {
+  const body = {
+    name: document.getElementById('fName').value,
+    sourceDir: document.getElementById('fSourceDir').value,
+    repoSubdir: document.getElementById('fRepoSubdir').value,
+  };
+  try {
+    if (editingId) {
+      await api('/mappings/' + editingId, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    } else {
+      await api('/mappings', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    }
+    closeModal();
+    loadMappings();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function delMapping(id) {
+  if (!confirm('Delete this mapping?')) return;
+  try {
+    await api('/mappings/' + id, { method: 'DELETE' });
+    loadMappings();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+function refresh() {
+  loadStatus();
+  loadMappings();
+  loadHistory();
+}
+
+refresh();
+setInterval(refresh, 60000);
+</script>
+</body>
+</html>

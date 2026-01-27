@@ -4,26 +4,53 @@ services:
   git-backup:
     image: ghcr.io/mccahan/git-backup:latest
     container_name: git-backup
+    ports:
+      - "3000:3000"
     environment:
       # Required: Git repository URL to backup to
       - GIT_REPO_URL=https://github.com/yourusername/your-backup-repo.git
-      
+
       # Required: GitHub token for authentication and Copilot access
       - GITHUB_TOKEN=your_github_token_here
-      
+
       # Optional: Git branch (default: main)
       - GIT_BRANCH=main
-      
+
       # Optional: Backup interval in hours (default: 6)
       - BACKUP_INTERVAL_HOURS=6
-      
+
       # Optional: Git user configuration
       - GIT_USER_NAME=Git Backup Bot
       - GIT_USER_EMAIL=gitbackup@example.com
-      
+
       # Optional: Subdirectory within the repository to sync to (e.g., "servers/web01")
       # - REPO_SUBDIR=
+
+      # Optional: Web UI port (default: 3000)
+      # - WEB_UI_PORT=3000
+
+      # Optional: Base path for reverse proxy (e.g., /git-backup)
+      # - BASE_PATH=/git-backup
+
+      # Optional: Config and history file paths
+      # - CONFIG_FILE=/data/config.json
+      # - HISTORY_FILE=/data/history.json
     volumes:
       # Mount the directory you want to backup
       - /path/to/your/data:/backup
+      # Persistent storage for config and history
+      - git-backup-data:/data
     restart: unless-stopped
+    labels:
+      - homepage.group=Infrastructure
+      - homepage.name=Git Backup
+      - homepage.icon=git.png
+      - homepage.href=http://git-backup:3000
+      - homepage.description=Automated git backups
+      - homepage.widget.type=iframe
+      - homepage.widget.src=http://git-backup:3000/widget.html
+      - homepage.widget.classes=h-32
+      - homepage.widget.refreshInterval=60000
+
+volumes:
+  git-backup-data:

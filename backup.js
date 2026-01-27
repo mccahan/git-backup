@@ -1,252 +1,210 @@
 #!/usr/bin/env node
 
-const { execSync, spawnSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const simpleGit = require('simple-git');
-const cron = require('node-cron');
 
-// Environment variables with defaults
-const config = {
-  repoUrl: process.env.GIT_REPO_URL,
-  branch: process.env.GIT_BRANCH || 'main',
-  backupDir: process.env.BACKUP_DIR || '/backup',
-  repoDir: '/repo',
-  repoSubdir: process.env.REPO_SUBDIR || '', // Subdirectory within the repo to sync to
-  userName: process.env.GIT_USER_NAME || 'Git Backup Bot',
-  userEmail: process.env.GIT_USER_EMAIL || 'gitbackup@example.com',
-  backupIntervalHours: parseInt(process.env.BACKUP_INTERVAL_HOURS) || 6,
-};
+const REPO_DIR = '/repo';
 
-// Validate required configuration
-if (!config.repoUrl) {
-  console.error('ERROR: GIT_REPO_URL environment variable is required');
-  process.exit(1);
-}
+/**
+ * Build a global config object from environment variables.
+ */
+function getGlobalConfig() {
+  const cfg = {
+    repoUrl: process.env.GIT_REPO_URL,
+    branch: process.env.GIT_BRANCH || 'main',
+    repoDir: REPO_DIR,
+    userName: process.env.GIT_USER_NAME || 'Git Backup Bot',
+    userEmail: process.env.GIT_USER_EMAIL || 'gitbackup@example.com',
+    backupIntervalHours: parseInt(process.env.BACKUP_INTERVAL_HOURS) || 6,
+  };
 
-// Add GITHUB_TOKEN to the repo URL if it's an HTTPS URL
-if (config.repoUrl.startsWith('https://') && process.env.GITHUB_TOKEN) {
-  const url = new URL(config.repoUrl);
-  // GitHub accepts the token directly as the username (with empty password)
-  url.username = process.env.GITHUB_TOKEN;
-  url.password = ''; // Can be empty when using token as username
-  config.repoUrl = url.toString();
-
-  console.log('Using GITHUB_TOKEN for authentication in repository URL');
-  // Don't log the full URL as it contains the token
-  console.log('Repository URL configured with authentication token');
-}
-
-console.log(`=== Git Backup Started at ${new Date().toISOString()} ===`);
-
-async function runBackup() {
-  try {
-    // Initialize git with configuration
-    console.log('Configuring Git user');
-
-    let repoGit;
-
-    // Remove existing repository directory if it exists to ensure fresh clone
-    console.log('Checking repository status');
-    if (fs.existsSync(config.repoDir)) {
-      // Validate that we're only deleting the expected repository directory
-      // This prevents accidental deletion if config.repoDir is misconfigured
-      const expectedRepoDir = '/repo';
-      if (config.repoDir !== expectedRepoDir) {
-        throw new Error(`Unexpected repoDir value: ${config.repoDir}. Expected: ${expectedRepoDir}`);
-      }
-      console.log('Removing existing repository directory for fresh clone');
-      try {
-        fs.rmSync(config.repoDir, { recursive: true, force: true });
-        console.log('Successfully removed existing repository directory');
-      } catch (error) {
-        console.error('Failed to remove existing repository directory:', error.message);
-        throw error;
-      }
-    }
-
-    // Clone the repository fresh
-    console.log(`Cloning repository: ${config.repoUrl}`);
-    await simpleGit().clone(config.repoUrl, config.repoDir);
-    repoGit = simpleGit(config.repoDir);
-    console.log(`Repository cloned to ${config.repoDir}`);
-    // Try to checkout the branch, create if doesn't exist
-    try {
-      await repoGit.checkout(config.branch);
-    } catch (error) {
-      await repoGit.checkoutLocalBranch(config.branch);
-    }
-
-    console.log("Setting git user.name to:", config.userName);
-    await repoGit.addConfig('user.name', config.userName);
-    console.log("Setting git user.email to:", config.userEmail);
-    await repoGit.addConfig('user.email', config.userEmail);
-    console.log("Setting git init.defaultBranch to:", config.branch);
-    await repoGit.addConfig('init.defaultBranch', config.branch);
-
-    // Copy files from backup directory to repo (excluding .git)
-    const targetDir = config.repoSubdir 
-      ? path.join(config.repoDir, config.repoSubdir)
-      : config.repoDir;
-    
-    // Validate paths to prevent command injection
-    if (config.backupDir.includes('"') || config.backupDir.includes("'")) {
-      throw new Error('Invalid BACKUP_DIR: path contains quotes');
-    }
-    if (targetDir.includes('"') || targetDir.includes("'")) {
-      throw new Error('Invalid target directory: path contains quotes');
-    }
-    
-    // Create subdirectory if it doesn't exist
-    if (config.repoSubdir && !fs.existsSync(targetDir)) {
-      console.log(`Creating subdirectory: ${config.repoSubdir}`);
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
-    
-    console.log(`Copying files from ${config.backupDir} to ${targetDir}`);
-    try {
-      // Build rsync arguments
-      const rsyncArgs = [
-        '-av',
-        '--delete',
-        '--exclude=.git',
-        '--exclude=.gitignore'
-      ];
-      
-      // Check if .gitignore exists in backup directory and use it for exclusions
-      const gitignorePath = path.join(config.backupDir, '.gitignore');
-      if (fs.existsSync(gitignorePath)) {
-        // Validate path to prevent shell injection
-        if (gitignorePath.includes('"') || gitignorePath.includes("'") || gitignorePath.includes(';') || gitignorePath.includes('|')) {
-          throw new Error('Invalid .gitignore path: contains potentially dangerous characters');
-        }
-        console.log('Found .gitignore, using it to exclude files');
-        rsyncArgs.push(`--exclude-from=${gitignorePath}`);
-      }
-      
-      rsyncArgs.push(`${config.backupDir}/`);
-      rsyncArgs.push(`${targetDir}/`);
-      
-      // Use array form to avoid shell injection
-      const result = spawnSync('rsync', rsyncArgs, { stdio: 'inherit' });
-      
-      if (result.error) {
-        throw result.error;
-      }
-      if (result.status !== 0) {
-        throw new Error(`rsync exited with code ${result.status}`);
-      }
-    } catch (error) {
-      console.error('Error during rsync:', error.message);
-      throw error;
-    }
-
-    // Check if there are changes
-    const status = await repoGit.status();
-    
-    if (status.files.length === 0) {
-      console.log('No changes detected, nothing to backup');
-      console.log(`=== Git Backup Completed at ${new Date().toISOString()} ===`);
-      return;
-    }
-
-    console.log('Changes detected:', status.files.length, 'files modified');
-    
-    // Stage all changes
-    await repoGit.add('.');
-
-    // Use GitHub Copilot CLI to commit changes (with fallback)
-    await commitWithCopilot(repoGit);
-
-    // Push changes
-    console.log('Pushing changes to remote repository');
-    await repoGit.push(['--set-upstream', 'origin', config.branch]);
-
-    console.log(`=== Git Backup Completed at ${new Date().toISOString()} ===`);
-  } catch (error) {
-    console.error('Backup failed:', error.message);
-    process.exit(1);
+  if (!cfg.repoUrl) {
+    throw new Error('GIT_REPO_URL environment variable is required');
   }
+
+  // Embed GITHUB_TOKEN into the clone URL
+  if (cfg.repoUrl.startsWith('https://') && process.env.GITHUB_TOKEN) {
+    const url = new URL(cfg.repoUrl);
+    url.username = process.env.GITHUB_TOKEN;
+    url.password = '';
+    cfg.repoUrl = url.toString();
+    console.log('Repository URL configured with authentication token');
+  }
+
+  return cfg;
 }
 
-async function commitWithCopilot(repoGit) {
+/**
+ * Remove /repo and do a fresh clone. Returns a simple-git instance.
+ */
+async function prepareRepo(globalConfig) {
+  const { repoUrl, branch, repoDir, userName, userEmail } = globalConfig;
+
+  if (fs.existsSync(repoDir)) {
+    if (repoDir !== REPO_DIR) {
+      throw new Error(`Unexpected repoDir value: ${repoDir}. Expected: ${REPO_DIR}`);
+    }
+    console.log('Removing existing repository directory for fresh clone');
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+
+  console.log('Cloning repository...');
+  await simpleGit().clone(repoUrl, repoDir);
+  const repoGit = simpleGit(repoDir);
+
   try {
-    console.log('Using GitHub Copilot CLI to commit changes...');
-    
-    // Use the new copilot CLI to perform the commit
-    // The --allow-tool flag allows copilot to execute git commands
-    const result = spawnSync('copilot', [
-      '-p',
-      'git commit with message summarizing these changes',
-      '--allow-tool',
-      'shell(git:*)'
-    ], { 
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: config.repoDir
-    });
-    
-    if (result.error) {
-      throw result.error;
+    await repoGit.checkout(branch);
+  } catch {
+    await repoGit.checkoutLocalBranch(branch);
+  }
+
+  await repoGit.addConfig('user.name', userName);
+  await repoGit.addConfig('user.email', userEmail);
+  await repoGit.addConfig('init.defaultBranch', branch);
+
+  return repoGit;
+}
+
+/**
+ * Rsync sourceDir into /repo/<repoSubdir>, commit, push.
+ * Returns { commitSha, commitMessage, filesChanged } or null if no changes.
+ */
+async function runBackupForMapping(repoGit, mapping, globalConfig) {
+  const { repoDir, branch } = globalConfig;
+  const { sourceDir, repoSubdir, name } = mapping;
+
+  const targetDir = repoSubdir ? path.join(repoDir, repoSubdir) : repoDir;
+
+  // Validate paths
+  for (const p of [sourceDir, targetDir]) {
+    if (/["';|]/.test(p)) {
+      throw new Error(`Invalid path: ${p}`);
     }
-    
-    if (result.status !== 0) {
-      console.log('Copilot output:', result.stdout);
-      console.log('Copilot stderr:', result.stderr);
-      throw new Error(`Copilot exited with code ${result.status}`);
+  }
+
+  if (repoSubdir && !fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+
+  console.log(`[${name}] Syncing ${sourceDir} → ${targetDir}`);
+
+  const rsyncArgs = [
+    '-av',
+    '--delete',
+    '--exclude=.git',
+    '--exclude=.gitignore',
+  ];
+
+  const gitignorePath = path.join(sourceDir, '.gitignore');
+  if (fs.existsSync(gitignorePath)) {
+    if (/["';|]/.test(gitignorePath)) {
+      throw new Error('Invalid .gitignore path');
     }
-    
-    console.log('Copilot successfully committed changes');
-    console.log('Output:', result.stdout);
+    rsyncArgs.push(`--exclude-from=${gitignorePath}`);
+  }
+
+  rsyncArgs.push(`${sourceDir}/`, `${targetDir}/`);
+
+  const rsyncResult = spawnSync('rsync', rsyncArgs, { stdio: 'inherit' });
+  if (rsyncResult.error) throw rsyncResult.error;
+  if (rsyncResult.status !== 0) throw new Error(`rsync exited with code ${rsyncResult.status}`);
+
+  const status = await repoGit.status();
+  if (status.files.length === 0) {
+    console.log(`[${name}] No changes detected`);
+    return null;
+  }
+
+  const filesChanged = status.files.length;
+  console.log(`[${name}] ${filesChanged} files changed`);
+
+  await repoGit.add('.');
+
+  // Commit (Copilot or fallback)
+  const commitMessage = await commitWithCopilot(repoGit, name);
+
+  // Push
+  await repoGit.push(['--set-upstream', 'origin', branch]);
+
+  // Read SHA
+  const log = await repoGit.log({ n: 1 });
+  const commitSha = log.latest.hash;
+
+  return { commitSha, commitMessage, filesChanged };
+}
+
+async function commitWithCopilot(repoGit, mappingName) {
+  try {
+    console.log(`[${mappingName}] Attempting Copilot commit...`);
+    const result = spawnSync(
+      'copilot',
+      ['-p', 'git commit with message summarizing these changes', '--allow-tool', 'shell(git:*)'],
+      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], cwd: REPO_DIR }
+    );
+
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error(`Copilot exited with code ${result.status}`);
+
+    console.log(`[${mappingName}] Copilot committed successfully`);
+    // Read the commit message Copilot used
+    const log = await repoGit.log({ n: 1 });
+    return log.latest.message;
   } catch (error) {
-    console.log('Copilot unavailable or failed, using fallback commit:', error.message);
-    
-    // Fallback to manual commit with timestamp
-    const fallbackMessage = `Backup: ${new Date().toISOString()}`;
-    console.log(`Committing with fallback message: ${fallbackMessage}`);
+    const fallbackMessage = `Backup ${mappingName}: ${new Date().toISOString()}`;
+    console.log(`[${mappingName}] Copilot unavailable, using fallback: ${error.message}`);
     await repoGit.commit(fallbackMessage);
+    return fallbackMessage;
   }
 }
 
-// Main execution
-// Check if we're running in scheduled mode or one-time mode
-const isScheduledMode = process.argv.includes('--schedule') || process.env.RUN_SCHEDULER === 'true';
+module.exports = { getGlobalConfig, prepareRepo, runBackupForMapping };
 
-if (isScheduledMode) {
-  console.log('=== Git Backup Scheduler Starting ===');
-  console.log(`Backup interval: ${config.backupIntervalHours} hours`);
-  
-  // Run initial backup immediately
-  console.log('Running initial backup...');
-  runBackup().catch(error => {
-    console.error('Initial backup failed:', error.message);
-  });
-  
-  // Schedule periodic backups
-  // Convert hours to cron expression: "0 */N * * *" for every N hours
-  const cronExpression = `0 */${config.backupIntervalHours} * * *`;
-  console.log(`Scheduling backups with cron expression: ${cronExpression}`);
-  
-  cron.schedule(cronExpression, () => {
-    console.log('\n=== Scheduled Backup Starting ===');
-    runBackup().catch(error => {
-      console.error('Scheduled backup failed:', error.message);
+// Standalone execution (backward compat)
+if (require.main === module) {
+  const cron = require('node-cron');
+
+  const globalConfig = getGlobalConfig();
+  const backupDir = process.env.BACKUP_DIR || '/backup';
+  const repoSubdir = process.env.REPO_SUBDIR || '';
+
+  const mapping = {
+    id: 'standalone',
+    name: repoSubdir || 'Default',
+    sourceDir: backupDir,
+    repoSubdir,
+    enabled: true,
+  };
+
+  async function runBackup() {
+    console.log(`=== Git Backup Started at ${new Date().toISOString()} ===`);
+    const repoGit = await prepareRepo(globalConfig);
+    const result = await runBackupForMapping(repoGit, mapping, globalConfig);
+    if (result) {
+      console.log(`Committed ${result.filesChanged} files: ${result.commitMessage}`);
+    }
+    console.log(`=== Git Backup Completed at ${new Date().toISOString()} ===`);
+  }
+
+  const isScheduledMode = process.argv.includes('--schedule') || process.env.RUN_SCHEDULER === 'true';
+
+  if (isScheduledMode) {
+    console.log(`=== Git Backup Scheduler Starting (every ${globalConfig.backupIntervalHours}h) ===`);
+
+    runBackup().catch((err) => console.error('Initial backup failed:', err.message));
+
+    const cronExpression = `0 */${globalConfig.backupIntervalHours} * * *`;
+    cron.schedule(cronExpression, () => {
+      runBackup().catch((err) => console.error('Scheduled backup failed:', err.message));
     });
-  });
-  
-  console.log('Scheduler running. Press Ctrl+C to stop.');
-  
-  // Keep the process running
-  process.on('SIGTERM', () => {
-    console.log('Received SIGTERM, shutting down gracefully...');
-    process.exit(0);
-  });
-  
-  process.on('SIGINT', () => {
-    console.log('Received SIGINT, shutting down gracefully...');
-    process.exit(0);
-  });
-} else {
-  // One-time backup mode (original behavior)
-  runBackup();
+
+    process.on('SIGTERM', () => process.exit(0));
+    process.on('SIGINT', () => process.exit(0));
+  } else {
+    runBackup().catch((err) => {
+      console.error('Backup failed:', err.message);
+      process.exit(1);
+    });
+  }
 }

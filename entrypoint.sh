@@ -41,4 +41,4 @@ git config --global user.email "${GIT_USER_EMAIL}"
 # Run Node.js scheduler
 echo "Starting Node.js scheduler..."
 export RUN_SCHEDULER=true
-exec node /usr/local/bin/backup.js --schedule
+exec node /usr/local/bin/server.js

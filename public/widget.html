@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Git Backup Widget</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: transparent; color: #e6edf3; padding: 10px 14px; font-size: 13px; line-height: 1.4; }
+  .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .label { color: #8b949e; }
+  .value { font-weight: 500; text-align: right; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  .dot-ok { background: #3fb950; }
+  .dot-err { background: #f85149; }
+  .dot-idle { background: #8b949e; }
+  .msg { color: #8b949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  a { color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="row">
+  <span class="label">Mappings</span>
+  <span class="value" id="wMappings">—</span>
+</div>
+<div class="row">
+  <span class="label">Last Backup</span>
+  <span class="value" id="wLastBackup">—</span>
+</div>
+<div class="row">
+  <span class="label">Status</span>
+  <span class="value" id="wStatus"><span class="dot dot-idle"></span>idle</span>
+</div>
+<div class="msg" id="wMsg">—</div>
+
+<script>
+const BASE_PATH = window.location.pathname.replace(/\/widget\.html$/, '').replace(/\/+$/, '');
+
+function relTime(iso) {
+  if (!iso) return 'never';
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+
+async function load() {
+  try {
+    const [mappings, status, history] = await Promise.all([
+      fetch(BASE_PATH + '/api/mappings').then(r => r.json()),
+      fetch(BASE_PATH + '/api/status').then(r => r.json()),
+      fetch(BASE_PATH + '/api/history?limit=1').then(r => r.json()),
+    ]);
+
+    document.getElementById('wMappings').textContent = mappings.length;
+
+    const latest = history[0];
+    document.getElementById('wLastBackup').textContent = latest ? relTime(latest.timestamp) : 'never';
+
+    if (status.backupInProgress) {
+      document.getElementById('wStatus').innerHTML = '<span class="dot dot-ok"></span>running';
+    } else if (latest && latest.error) {
+      document.getElementById('wStatus').innerHTML = '<span class="dot dot-err"></span>error';
+    } else {
+      document.getElementById('wStatus').innerHTML = '<span class="dot dot-ok"></span>ok';
+    }
+
+    if (latest && latest.commitMessage) {
+      const msg = latest.commitMessage.length > 60
+        ? latest.commitMessage.substring(0, 57) + '…'
+        : latest.commitMessage;
+      const el = document.getElementById('wMsg');
+      if (latest.commitUrl) {
+        el.innerHTML = '<a href="' + latest.commitUrl + '" target="_blank">' + escHtml(msg) + '</a>';
+      } else {
+        el.textContent = msg;
+      }
+    }
+  } catch (e) {
+    document.getElementById('wStatus').innerHTML = '<span class="dot dot-err"></span>error';
+    document.getElementById('wMsg').textContent = e.message;
+  }
+}
+
+function escHtml(s) {
+  const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+}
+
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>
