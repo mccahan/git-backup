@@ -111,6 +111,10 @@
       <textarea id="fIgnorePatterns" rows="3" placeholder="*.log&#10;node_modules/&#10;.DS_Store"></textarea>
       <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">One rsync exclude pattern per line. Applied in addition to global patterns.</div>
     </div>
+    <div class="form-group" style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" id="fReadmeSection" style="width:auto">
+      <label for="fReadmeSection" style="display:inline;color:var(--text)">Include section in repo README.md</label>
+    </div>
     <input type="hidden" id="fId">
     <div class="form-actions">
       <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -288,6 +292,7 @@ function openModal(m) {
   document.getElementById('fSourceDir').value = m ? m.sourceDir : '';
   document.getElementById('fRepoSubdir').value = m ? m.repoSubdir : '';
   document.getElementById('fIgnorePatterns').value = m && m.ignorePatterns ? m.ignorePatterns.join('\n') : '';
+  document.getElementById('fReadmeSection').checked = m ? !!m.readmeSection : false;
   document.getElementById('modalOverlay').classList.add('open');
 }
 function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
@@ -305,6 +310,7 @@ async function saveMapping() {
     repoSubdir: document.getElementById('fRepoSubdir').value,
     ignorePatterns: document.getElementById('fIgnorePatterns').value
       .split('\n').map(l => l.trim()).filter(Boolean),
+    readmeSection: document.getElementById('fReadmeSection').checked,
   };
   try {
     if (editingId) {

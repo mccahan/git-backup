@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+const { spawnSync } = require('child_process');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -129,6 +130,77 @@ async function runFullBackup(mappingId) {
       }
     }
 
+    // Update root README.md with sections for opted-in mappings
+    const readmeMappings = mappings.filter((m) => m.readmeSection);
+    if (readmeMappings.length > 0) {
+      try {
+        const readmePath = path.join(globalConfig.repoDir, 'README.md');
+        let readmeContent = '';
+        if (fs.existsSync(readmePath)) {
+          readmeContent = fs.readFileSync(readmePath, 'utf-8');
+        }
+
+        const startMarker = '<!-- git-backup-start -->';
+        const endMarker = '<!-- git-backup-end -->';
+
+        const sections = [];
+        for (const m of readmeMappings) {
+          const subdir = m.repoSubdir || '.';
+          const targetDir = m.repoSubdir ? path.join(globalConfig.repoDir, m.repoSubdir) : globalConfig.repoDir;
+          const latest = results.find((r) => r.mappingId === m.id && !r.noChanges && !r.error);
+          const latestNoChange = results.find((r) => r.mappingId === m.id && r.noChanges);
+          let statusLine = '';
+          if (latest) {
+            statusLine = `Last backup: ${latest.commitSha.substring(0, 7)} — ${latest.filesChanged} files changed`;
+            if (latest.commitUrl) statusLine = `Last backup: [${latest.commitSha.substring(0, 7)}](${latest.commitUrl}) — ${latest.filesChanged} files changed`;
+          } else if (latestNoChange) {
+            statusLine = 'Last backup: no changes detected';
+          }
+
+          // Use Copilot to generate a description of the mapping contents
+          let description = '';
+          try {
+            const prompt = `Look at the files in the directory "${targetDir}" and write a concise Markdown description (2-4 sentences) of what this project or directory contains. Describe the purpose of the application or configuration, key technologies used, and notable files. Output ONLY the Markdown text, no code fences.`;
+            console.log(`[${m.name}] Generating README description via Copilot...`);
+            const result = spawnSync(
+              'copilot',
+              ['-p', prompt, '--allow-tool', 'shell(ls:*,cat:*,head:*,file:*)'],
+              { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], cwd: targetDir, timeout: 60000 }
+            );
+            if (result.error) throw result.error;
+            if (result.status !== 0) throw new Error(`Copilot exited with code ${result.status}`);
+            const output = (result.stdout || '').trim();
+            if (output) {
+              description = output;
+              console.log(`[${m.name}] Copilot description generated`);
+            }
+          } catch (err) {
+            console.log(`[${m.name}] Copilot description unavailable: ${err.message}`);
+          }
+
+          const lines = [`### ${m.name}`, '', `- **Source:** \`${m.sourceDir}\``, `- **Path:** \`${subdir}\``];
+          if (statusLine) lines.push(`- ${statusLine}`);
+          if (description) lines.push('', description);
+          sections.push(lines.join('\n'));
+        }
+
+        const managedBlock = `${startMarker}\n## Backup Contents\n\n${sections.join('\n\n')}\n${endMarker}`;
+
+        const startIdx = readmeContent.indexOf(startMarker);
+        const endIdx = readmeContent.indexOf(endMarker);
+        if (startIdx !== -1 && endIdx !== -1) {
+          readmeContent = readmeContent.substring(0, startIdx) + managedBlock + readmeContent.substring(endIdx + endMarker.length);
+        } else {
+          readmeContent = readmeContent ? readmeContent.trimEnd() + '\n\n' + managedBlock + '\n' : managedBlock + '\n';
+        }
+
+        fs.writeFileSync(readmePath, readmeContent);
+        console.log(`Updated README.md with ${readmeMappings.length} mapping sections`);
+      } catch (err) {
+        console.error('README update failed:', err.message);
+      }
+    }
+
     // Back up config.json into the repo if configured
     if (settings.configBackupPath && fs.existsSync(CONFIG_FILE)) {
       try {
@@ -136,16 +208,23 @@ async function runFullBackup(mappingId) {
         const destDir = path.dirname(destPath);
         if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
         fs.copyFileSync(CONFIG_FILE, destPath);
-        const status = await repoGit.status();
-        if (status.files.length > 0) {
-          await repoGit.add('.');
-          await repoGit.commit('Update git-backup config');
-          await repoGit.push(['--set-upstream', 'origin', globalConfig.branch]);
-          console.log(`Config backed up to ${settings.configBackupPath}`);
-        }
+        console.log(`Config copied to ${settings.configBackupPath}`);
       } catch (err) {
         console.error('Config backup failed:', err.message);
       }
+    }
+
+    // Commit any housekeeping changes (README, config backup)
+    try {
+      const status = await repoGit.status();
+      if (status.files.length > 0) {
+        await repoGit.add('.');
+        await repoGit.commit('Update git-backup metadata');
+        await repoGit.push(['--set-upstream', 'origin', globalConfig.branch]);
+        console.log('Committed git-backup metadata updates');
+      }
+    } catch (err) {
+      console.error('Metadata commit failed:', err.message);
     }
   } finally {
     backupInProgress = false;

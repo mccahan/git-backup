@@ -87,7 +87,7 @@ function updateMapping(id, updates) {
     throw new Error(`A mapping with repoSubdir "${updates.repoSubdir}" already exists`);
   }
 
-  const allowed = ['name', 'sourceDir', 'repoSubdir', 'enabled', 'ignorePatterns'];
+  const allowed = ['name', 'sourceDir', 'repoSubdir', 'enabled', 'ignorePatterns', 'readmeSection'];
   for (const key of allowed) {
     if (updates[key] !== undefined) {
       cfg.mappings[idx][key] = updates[key];
