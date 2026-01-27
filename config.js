@@ -40,6 +40,18 @@ function saveConfig(cfg) {
   fs.renameSync(tmp, CONFIG_FILE);
 }
 
+function getSettings() {
+  const cfg = loadConfig();
+  return cfg.settings || {};
+}
+
+function updateSettings(updates) {
+  const cfg = loadConfig();
+  cfg.settings = { ...(cfg.settings || {}), ...updates };
+  saveConfig(cfg);
+  return cfg.settings;
+}
+
 function getMappings() {
   return loadConfig().mappings;
 }
@@ -92,4 +104,4 @@ function deleteMapping(id) {
   saveConfig(cfg);
 }
 
-module.exports = { loadConfig, getMappings, addMapping, updateMapping, deleteMapping };
+module.exports = { loadConfig, getSettings, updateSettings, getMappings, addMapping, updateMapping, deleteMapping, CONFIG_FILE };

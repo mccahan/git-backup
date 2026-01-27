@@ -66,8 +66,10 @@
   <div class="item"><span class="label">Repo:</span> <span id="sRepoUrl">—</span></div>
   <div class="item"><span class="label">Branch:</span> <span id="sBranch">—</span></div>
   <div class="item"><span class="label">Interval:</span> <span id="sInterval">—</span></div>
+  <div class="item"><span class="label">Config backup:</span> <span id="sConfigBackup">—</span></div>
   <div class="item" id="sRunning" style="display:none"><span class="spinner"></span> Backup running…</div>
-  <div style="margin-left:auto">
+  <div style="margin-left:auto;display:flex;gap:8px">
+    <button class="btn btn-secondary" onclick="openSettingsModal()">Settings</button>
     <button class="btn btn-green" id="btnBackupAll" onclick="runBackup()">Run Backup All</button>
   </div>
 </div>
@@ -111,6 +113,24 @@
   </div>
 </div>
 
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsOverlay">
+  <div class="modal">
+    <h3>Settings</h3>
+    <div class="form-group">
+      <label>Config Backup Path</label>
+      <input id="fConfigBackupPath" placeholder="e.g. git-backup-config.json (leave empty to disable)">
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:4px">
+        When set, config.json is committed to this path in the repo after each backup run.
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
+      <button class="btn" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const BASE = document.currentScript ? '' : '';
 // Detect base path from current page URL
@@ -147,6 +167,33 @@ async function loadStatus() {
   document.getElementById('sInterval').textContent = s.intervalHours + 'h';
   document.getElementById('sRunning').style.display = s.backupInProgress ? '' : 'none';
   document.getElementById('btnBackupAll').disabled = s.backupInProgress;
+
+  const settings = await api('/settings');
+  const cbEl = document.getElementById('sConfigBackup');
+  cbEl.textContent = settings.configBackupPath || 'off';
+}
+
+function openSettingsModal() {
+  api('/settings').then(s => {
+    document.getElementById('fConfigBackupPath').value = s.configBackupPath || '';
+    document.getElementById('settingsOverlay').classList.add('open');
+  });
+}
+function closeSettingsModal() { document.getElementById('settingsOverlay').classList.remove('open'); }
+
+async function saveSettings() {
+  const configBackupPath = document.getElementById('fConfigBackupPath').value.trim();
+  try {
+    await api('/settings', {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ configBackupPath: configBackupPath || '' }),
+    });
+    closeSettingsModal();
+    loadStatus();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
 }
 
 async function loadMappings() {

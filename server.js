@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 
 const express = require('express');
+const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
+const simpleGit = require('simple-git');
 const { getGlobalConfig, prepareRepo, runBackupForMapping } = require('./backup');
-const { getMappings, addMapping, updateMapping, deleteMapping } = require('./config');
+const { getMappings, addMapping, updateMapping, deleteMapping, getSettings, updateSettings, CONFIG_FILE } = require('./config');
 const { addHistoryEntry, getHistory, getLatestForMapping } = require('./history');
 const { buildCommitUrl } = require('./github');
 
@@ -65,6 +67,26 @@ async function runFullBackup(mappingId) {
         results.push({ mappingId: mapping.id, mappingName: mapping.name, error: err.message });
       }
     }
+
+    // Back up config.json into the repo if configured
+    const settings = getSettings();
+    if (settings.configBackupPath && fs.existsSync(CONFIG_FILE)) {
+      try {
+        const destPath = path.join(globalConfig.repoDir, settings.configBackupPath);
+        const destDir = path.dirname(destPath);
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+        fs.copyFileSync(CONFIG_FILE, destPath);
+        const status = await repoGit.status();
+        if (status.files.length > 0) {
+          await repoGit.add('.');
+          await repoGit.commit('Update git-backup config');
+          await repoGit.push(['--set-upstream', 'origin', globalConfig.branch]);
+          console.log(`Config backed up to ${settings.configBackupPath}`);
+        }
+      } catch (err) {
+        console.error('Config backup failed:', err.message);
+      }
+    }
   } finally {
     backupInProgress = false;
   }
@@ -122,6 +144,19 @@ api.delete('/mappings/:id', (req, res) => {
   try {
     deleteMapping(req.params.id);
     res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+api.get('/settings', (req, res) => {
+  res.json(getSettings());
+});
+
+api.put('/settings', (req, res) => {
+  try {
+    const settings = updateSettings(req.body);
+    res.json(settings);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
