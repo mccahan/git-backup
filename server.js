@@ -130,9 +130,10 @@ async function runFullBackup(mappingId) {
       }
     }
 
-    // Update root README.md with sections for opted-in mappings
+    // Update root README.md with sections for opted-in mappings — only if files actually changed
     const readmeMappings = mappings.filter((m) => m.readmeSection);
-    if (readmeMappings.length > 0) {
+    const changedMappingIds = new Set(results.filter((r) => !r.noChanges && !r.error && r.commitSha).map((r) => r.mappingId));
+    if (readmeMappings.length > 0 && changedMappingIds.size > 0) {
       try {
         const readmePath = path.join(globalConfig.repoDir, 'README.md');
         let readmeContent = '';
@@ -143,18 +144,36 @@ async function runFullBackup(mappingId) {
         const startMarker = '<!-- git-backup-start -->';
         const endMarker = '<!-- git-backup-end -->';
 
+        // Parse existing sections from README so we can reuse them for unchanged mappings
+        const existingSections = {};
+        const existingStartIdx = readmeContent.indexOf(startMarker);
+        const existingEndIdx = readmeContent.indexOf(endMarker);
+        if (existingStartIdx !== -1 && existingEndIdx !== -1) {
+          const existingBlock = readmeContent.substring(existingStartIdx + startMarker.length, existingEndIdx);
+          const sectionParts = existingBlock.split(/(?=^### )/m).filter((s) => s.trim());
+          for (const part of sectionParts) {
+            const nameMatch = part.match(/^### (.+)/);
+            if (nameMatch) existingSections[nameMatch[1].trim()] = part.trim();
+          }
+        }
+
         const sections = [];
         for (const m of readmeMappings) {
           const subdir = m.repoSubdir || '.';
           const targetDir = m.repoSubdir ? path.join(globalConfig.repoDir, m.repoSubdir) : globalConfig.repoDir;
+
+          // Only regenerate section for mappings that had actual file changes
+          if (!changedMappingIds.has(m.id) && existingSections[m.name]) {
+            console.log(`[${m.name}] No changes, reusing existing README section`);
+            sections.push(existingSections[m.name]);
+            continue;
+          }
+
           const latest = results.find((r) => r.mappingId === m.id && !r.noChanges && !r.error);
-          const latestNoChange = results.find((r) => r.mappingId === m.id && r.noChanges);
           let statusLine = '';
           if (latest) {
             statusLine = `Last backup: ${latest.commitSha.substring(0, 7)} — ${latest.filesChanged} files changed`;
             if (latest.commitUrl) statusLine = `Last backup: [${latest.commitSha.substring(0, 7)}](${latest.commitUrl}) — ${latest.filesChanged} files changed`;
-          } else if (latestNoChange) {
-            statusLine = 'Last backup: no changes detected';
           }
 
           // Use Copilot to generate a description of the mapping contents
