@@ -46,6 +46,10 @@ function relTime(iso) {
   return Math.floor(s / 86400) + 'd ago';
 }
 
+function setIfChanged(el, prop, value) {
+  if (el[prop] !== value) el[prop] = value;
+}
+
 async function load() {
   try {
     const [mappings, status, history] = await Promise.all([
@@ -54,18 +58,20 @@ async function load() {
       fetch(BASE_PATH + '/api/history?limit=1').then(r => r.json()),
     ]);
 
-    document.getElementById('wMappings').textContent = mappings.length;
+    setIfChanged(document.getElementById('wMappings'), 'textContent', String(mappings.length));
 
     const latest = history[0];
-    document.getElementById('wLastBackup').textContent = latest ? relTime(latest.timestamp) : 'never';
+    setIfChanged(document.getElementById('wLastBackup'), 'textContent', latest ? relTime(latest.timestamp) : 'never');
 
+    let statusHtml;
     if (status.backupInProgress) {
-      document.getElementById('wStatus').innerHTML = '<span class="dot dot-ok"></span>running';
+      statusHtml = '<span class="dot dot-ok"></span>running';
     } else if (latest && latest.error) {
-      document.getElementById('wStatus').innerHTML = '<span class="dot dot-err"></span>error';
+      statusHtml = '<span class="dot dot-err"></span>error';
     } else {
-      document.getElementById('wStatus').innerHTML = '<span class="dot dot-ok"></span>ok';
+      statusHtml = '<span class="dot dot-ok"></span>ok';
     }
+    setIfChanged(document.getElementById('wStatus'), 'innerHTML', statusHtml);
 
     if (latest && latest.commitMessage) {
       const msg = latest.commitMessage.length > 60
@@ -73,14 +79,15 @@ async function load() {
         : latest.commitMessage;
       const el = document.getElementById('wMsg');
       if (latest.commitUrl) {
-        el.innerHTML = '<a href="' + latest.commitUrl + '" target="_blank">' + escHtml(msg) + '</a>';
+        const html = '<a href="' + latest.commitUrl + '" target="_blank">' + escHtml(msg) + '</a>';
+        setIfChanged(el, 'innerHTML', html);
       } else {
-        el.textContent = msg;
+        setIfChanged(el, 'textContent', msg);
       }
     }
   } catch (e) {
-    document.getElementById('wStatus').innerHTML = '<span class="dot dot-err"></span>error';
-    document.getElementById('wMsg').textContent = e.message;
+    setIfChanged(document.getElementById('wStatus'), 'innerHTML', '<span class="dot dot-err"></span>error');
+    setIfChanged(document.getElementById('wMsg'), 'textContent', e.message);
   }
 }
 
