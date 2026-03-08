@@ -11,6 +11,10 @@ Docker container to run periodic backups of a mapped folder to a Git repository 
 - ⚡ One-way sync: only local changes are pushed to the remote repository
 - 🔧 Configurable backup intervals and Git settings
 
+## Screenshot
+
+![Git Backup Dashboard](screenshot.png)
+
 ## Quick Start
 
 ### Using Docker Run
