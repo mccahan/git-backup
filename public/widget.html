@@ -11,10 +11,13 @@
   .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
   .label { color: #8b949e; }
   .value { font-weight: 500; text-align: right; }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle;
+    transition: background-color 0.3s ease; }
   .dot-ok { background: #3fb950; }
   .dot-err { background: #f85149; }
   .dot-idle { background: #8b949e; }
+  .dot-running { background: #d29922; animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
   .msg { color: #8b949e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   a { color: #58a6ff; text-decoration: none; }
 </style>
@@ -30,12 +33,22 @@
 </div>
 <div class="row">
   <span class="label">Status</span>
-  <span class="value" id="wStatus"><span class="dot dot-idle"></span>idle</span>
+  <span class="value" id="wStatus"><span class="dot dot-idle" id="wDot"></span><span id="wStatusText">idle</span></span>
 </div>
 <div class="msg" id="wMsg">—</div>
 
 <script>
 const BASE_PATH = window.location.pathname.replace(/\/widget\.html$/, '').replace(/\/+$/, '');
+
+// Track current state to avoid unnecessary DOM updates
+let currentState = {
+  mappings: null,
+  lastBackup: null,
+  status: null,
+  statusText: null,
+  msg: null,
+  msgUrl: null
+};
 
 function relTime(iso) {
   if (!iso) return 'never';
@@ -46,28 +59,69 @@ function relTime(iso) {
   return Math.floor(s / 86400) + 'd ago';
 }
 
-function setIfChanged(el, prop, value) {
-  if (el[prop] !== value) el[prop] = value;
+function escHtml(s) {
+  const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
+}
+
+function updateDOM(newState) {
+  // Only update elements that actually changed
+  if (newState.mappings !== currentState.mappings) {
+    document.getElementById('wMappings').textContent = newState.mappings;
+    currentState.mappings = newState.mappings;
+  }
+  
+  if (newState.lastBackup !== currentState.lastBackup) {
+    document.getElementById('wLastBackup').textContent = newState.lastBackup;
+    currentState.lastBackup = newState.lastBackup;
+  }
+  
+  // Update status dot and text separately to avoid full innerHTML replacement
+  const dot = document.getElementById('wDot');
+  const statusText = document.getElementById('wStatusText');
+  
+  if (newState.status !== currentState.status) {
+    dot.className = 'dot dot-' + newState.status;
+    currentState.status = newState.status;
+  }
+  
+  if (newState.statusText !== currentState.statusText) {
+    statusText.textContent = newState.statusText;
+    currentState.statusText = newState.statusText;
+  }
+  
+  // Update message - compare both content and URL
+  if (newState.msg !== currentState.msg || newState.msgUrl !== currentState.msgUrl) {
+    const msgEl = document.getElementById('wMsg');
+    if (newState.msgUrl) {
+      msgEl.innerHTML = '<a href="' + escHtml(newState.msgUrl) + '" target="_blank">' + escHtml(newState.msg) + '</a>';
+    } else {
+      msgEl.textContent = newState.msg;
+    }
+    currentState.msg = newState.msg;
+    currentState.msgUrl = newState.msgUrl;
+  }
 }
 
 const CACHE_KEY = 'gitBackupWidget';
 
-function saveCache(data) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch (e) {}
+function saveCache(state) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(state)); } catch (e) {}
 }
 
 function restoreCache() {
   try {
     const cached = JSON.parse(localStorage.getItem(CACHE_KEY));
-    if (!cached) return;
-    if (cached.mappings) setIfChanged(document.getElementById('wMappings'), 'textContent', cached.mappings);
-    if (cached.lastBackup) setIfChanged(document.getElementById('wLastBackup'), 'textContent', cached.lastBackup);
-    if (cached.statusHtml) setIfChanged(document.getElementById('wStatus'), 'innerHTML', cached.statusHtml);
-    if (cached.msgHtml !== undefined) setIfChanged(document.getElementById('wMsg'), 'innerHTML', cached.msgHtml);
+    if (cached) updateDOM(cached);
   } catch (e) {}
 }
 
+let loadInProgress = false;
+
 async function load() {
+  // Prevent overlapping requests
+  if (loadInProgress) return;
+  loadInProgress = true;
+  
   try {
     const [mappings, status, history] = await Promise.all([
       fetch(BASE_PATH + '/api/mappings').then(r => r.json()),
@@ -76,40 +130,50 @@ async function load() {
     ]);
 
     const latest = history[0];
-    const mappingsText = String(mappings.length);
-    const lastBackupText = latest ? relTime(latest.timestamp) : 'never';
-    let statusHtml;
+    
+    let statusClass, statusTextVal;
     if (status.backupInProgress) {
-      statusHtml = '<span class="dot dot-ok"></span>running';
+      statusClass = 'running';
+      statusTextVal = 'running';
     } else if (latest && latest.error) {
-      statusHtml = '<span class="dot dot-err"></span>error';
+      statusClass = 'err';
+      statusTextVal = 'error';
     } else {
-      statusHtml = '<span class="dot dot-ok"></span>ok';
+      statusClass = 'ok';
+      statusTextVal = 'ok';
     }
-    let msgHtml = '—';
+    
+    let msg = '—';
+    let msgUrl = null;
     if (latest && latest.commitMessage) {
-      const msg = latest.commitMessage.length > 60
+      msg = latest.commitMessage.length > 60
         ? latest.commitMessage.substring(0, 57) + '…'
         : latest.commitMessage;
-      msgHtml = latest.commitUrl
-        ? '<a href="' + latest.commitUrl + '" target="_blank">' + escHtml(msg) + '</a>'
-        : escHtml(msg);
+      msgUrl = latest.commitUrl || null;
     }
 
-    setIfChanged(document.getElementById('wMappings'), 'textContent', mappingsText);
-    setIfChanged(document.getElementById('wLastBackup'), 'textContent', lastBackupText);
-    setIfChanged(document.getElementById('wStatus'), 'innerHTML', statusHtml);
-    setIfChanged(document.getElementById('wMsg'), 'innerHTML', msgHtml);
+    const newState = {
+      mappings: String(mappings.length),
+      lastBackup: latest ? relTime(latest.timestamp) : 'never',
+      status: statusClass,
+      statusText: statusTextVal,
+      msg: msg,
+      msgUrl: msgUrl
+    };
 
-    saveCache({ mappings: mappingsText, lastBackup: lastBackupText, statusHtml, msgHtml });
+    updateDOM(newState);
+    saveCache(newState);
   } catch (e) {
-    setIfChanged(document.getElementById('wStatus'), 'innerHTML', '<span class="dot dot-err"></span>error');
-    setIfChanged(document.getElementById('wMsg'), 'textContent', e.message);
+    updateDOM({
+      ...currentState,
+      status: 'err',
+      statusText: 'error',
+      msg: e.message,
+      msgUrl: null
+    });
+  } finally {
+    loadInProgress = false;
   }
-}
-
-function escHtml(s) {
-  const d = document.createElement('div'); d.textContent = s; return d.innerHTML;
 }
 
 restoreCache();
