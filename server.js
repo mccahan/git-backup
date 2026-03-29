@@ -7,6 +7,7 @@ const path = require('path');
 const cron = require('node-cron');
 const simpleGit = require('simple-git');
 const { getGlobalConfig, prepareRepo, runBackupForMapping } = require('./backup');
+const { log, error } = require('./logger');
 const { getMappings, addMapping, updateMapping, deleteMapping, getSettings, updateSettings, CONFIG_FILE } = require('./config');
 const { addHistoryEntry, getHistory, getLatestForMapping } = require('./history');
 const { buildCommitUrl } = require('./github');
@@ -43,7 +44,7 @@ function restoreConfigFromRepo(repoDir) {
           const dir = path.dirname(CONFIG_FILE);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.copyFileSync(fullPath, CONFIG_FILE);
-          console.log(`Restored config from repo: ${explicit}`);
+          log(`Restored config from repo: ${explicit}`);
           return true;
         }
       } catch { /* not valid config, fall through */ }
@@ -64,13 +65,13 @@ function restoreConfigFromRepo(repoDir) {
           const dir = path.dirname(CONFIG_FILE);
           if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
           fs.copyFileSync(fullPath, CONFIG_FILE);
-          console.log(`Auto-discovered and restored config from repo: ${entry}`);
+          log(`Auto-discovered and restored config from repo: ${entry}`);
           return true;
         }
       } catch { /* skip unparseable files */ }
     }
   } catch (err) {
-    console.error('Config auto-discovery failed:', err.message);
+    error('Config auto-discovery failed:', err.message);
   }
 
   return false;
@@ -125,7 +126,7 @@ async function runFullBackup(mappingId) {
           results.push({ mappingId: mapping.id, mappingName: mapping.name, noChanges: true });
         }
       } catch (err) {
-        console.error(`[${mapping.name}] Backup failed:`, err.message);
+        error(`[${mapping.name}] Backup failed:`, err.message);
         results.push({ mappingId: mapping.id, mappingName: mapping.name, error: err.message });
       }
     }
@@ -164,7 +165,7 @@ async function runFullBackup(mappingId) {
 
           // Only regenerate section for mappings that had actual file changes
           if (!changedMappingIds.has(m.id) && existingSections[m.name]) {
-            console.log(`[${m.name}] No changes, reusing existing README section`);
+            log(`[${m.name}] No changes, reusing existing README section`);
             sections.push(existingSections[m.name]);
             continue;
           }
@@ -180,7 +181,7 @@ async function runFullBackup(mappingId) {
           let description = '';
           try {
             const prompt = `Look at the files in the directory "${targetDir}" and write a concise Markdown description (can include sentences, lists of features or notable tools like Docker images/projects, etc) of what this project or directory contains. Describe the purpose of the application or configuration, key technologies used, and notable files. Do not include any thinking or general information about the backup process. Output ONLY the Markdown text, no code fences, no tool runs.`;
-            console.log(`[${m.name}] Generating README description via Copilot...`);
+            log(`[${m.name}] Generating README description via Copilot...`);
             const result = spawnSync(
               'copilot',
               ['-p', prompt, '--allow-tool', 'shell(ls:*,cat:*,head:*,file:*)'],
@@ -195,10 +196,10 @@ async function runFullBackup(mappingId) {
               .trim();
             if (output) {
               description = output;
-              console.log(`[${m.name}] Copilot description generated`);
+              log(`[${m.name}] Copilot description generated`);
             }
           } catch (err) {
-            console.log(`[${m.name}] Copilot description unavailable: ${err.message}`);
+            log(`[${m.name}] Copilot description unavailable: ${err.message}`);
           }
 
           const lines = [`### ${m.name}`, '', `- **Source:** \`${m.sourceDir}\``, `- **Path:** \`${subdir}\``];
@@ -218,9 +219,9 @@ async function runFullBackup(mappingId) {
         }
 
         fs.writeFileSync(readmePath, readmeContent);
-        console.log(`Updated README.md with ${readmeMappings.length} mapping sections`);
+        log(`Updated README.md with ${readmeMappings.length} mapping sections`);
       } catch (err) {
-        console.error('README update failed:', err.message);
+        error('README update failed:', err.message);
       }
     }
 
@@ -231,9 +232,9 @@ async function runFullBackup(mappingId) {
         const destDir = path.dirname(destPath);
         if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
         fs.copyFileSync(CONFIG_FILE, destPath);
-        console.log(`Config copied to ${settings.configBackupPath}`);
+        log(`Config copied to ${settings.configBackupPath}`);
       } catch (err) {
-        console.error('Config backup failed:', err.message);
+        error('Config backup failed:', err.message);
       }
     }
 
@@ -244,10 +245,10 @@ async function runFullBackup(mappingId) {
         await repoGit.add('.');
         await repoGit.commit('Update git-backup metadata');
         await repoGit.push(['--set-upstream', 'origin', globalConfig.branch]);
-        console.log('Committed git-backup metadata updates');
+        log('Committed git-backup metadata updates');
       }
     } catch (err) {
-      console.error('Metadata commit failed:', err.message);
+      error('Metadata commit failed:', err.message);
     }
   } finally {
     backupInProgress = false;
@@ -349,19 +350,19 @@ app.use(`${BASE_PATH}/api`, api);
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Web UI available at http://localhost:${PORT}${BASE_PATH || '/'}`);
+  log(`Web UI available at http://localhost:${PORT}${BASE_PATH || '/'}`);
 });
 
 // Scheduler
 const cronExpression = `0 */${globalConfig.backupIntervalHours} * * *`;
-console.log(`Scheduling backups with cron: ${cronExpression}`);
+log(`Scheduling backups with cron: ${cronExpression}`);
 
 // Initial backup
-runFullBackup().catch((err) => console.error('Initial backup failed:', err.message));
+runFullBackup().catch((err) => error('Initial backup failed:', err.message));
 
 cron.schedule(cronExpression, () => {
-  console.log('\n=== Scheduled Backup Starting ===');
-  runFullBackup().catch((err) => console.error('Scheduled backup failed:', err.message));
+  log('\n=== Scheduled Backup Starting ===');
+  runFullBackup().catch((err) => error('Scheduled backup failed:', err.message));
 });
 
 process.on('SIGTERM', () => process.exit(0));

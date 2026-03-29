@@ -4,6 +4,7 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const simpleGit = require('simple-git');
+const { log, error } = require('./logger');
 
 const REPO_DIR = '/repo';
 
@@ -30,7 +31,7 @@ function getGlobalConfig() {
     url.username = process.env.GITHUB_TOKEN;
     url.password = '';
     cfg.repoUrl = url.toString();
-    console.log('Repository URL configured with authentication token');
+    log('Repository URL configured with authentication token');
   }
 
   return cfg;
@@ -46,11 +47,11 @@ async function prepareRepo(globalConfig) {
     if (repoDir !== REPO_DIR) {
       throw new Error(`Unexpected repoDir value: ${repoDir}. Expected: ${REPO_DIR}`);
     }
-    console.log('Removing existing repository directory for fresh clone');
+    log('Removing existing repository directory for fresh clone');
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
 
-  console.log('Cloning repository...');
+  log('Cloning repository...');
   await simpleGit().clone(repoUrl, repoDir);
   const repoGit = simpleGit(repoDir);
 
@@ -88,7 +89,7 @@ async function runBackupForMapping(repoGit, mapping, globalConfig) {
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
-  console.log(`[${name}] Syncing ${sourceDir} → ${targetDir}`);
+  log(`[${name}] Syncing ${sourceDir} → ${targetDir}`);
 
   const rsyncArgs = [
     '-av',
@@ -126,17 +127,17 @@ async function runBackupForMapping(repoGit, mapping, globalConfig) {
     const gitignoreDest = path.join(targetDir, '.gitignore');
     const content = '# Managed by git-backup\n' + allPatterns.join('\n') + '\n';
     fs.writeFileSync(gitignoreDest, content);
-    console.log(`[${name}] Wrote .gitignore (${allPatterns.length} patterns)`);
+    log(`[${name}] Wrote .gitignore (${allPatterns.length} patterns)`);
   }
 
   const status = await repoGit.status();
   if (status.files.length === 0) {
-    console.log(`[${name}] No changes detected`);
+    log(`[${name}] No changes detected`);
     return null;
   }
 
   const filesChanged = status.files.length;
-  console.log(`[${name}] ${filesChanged} files changed`);
+  log(`[${name}] ${filesChanged} files changed`);
 
   await repoGit.add('.');
 
@@ -147,15 +148,15 @@ async function runBackupForMapping(repoGit, mapping, globalConfig) {
   await repoGit.push(['--set-upstream', 'origin', branch]);
 
   // Read SHA
-  const log = await repoGit.log({ n: 1 });
-  const commitSha = log.latest.hash;
+  const gitLog = await repoGit.log({ n: 1 });
+  const commitSha = gitLog.latest.hash;
 
   return { commitSha, commitMessage, filesChanged };
 }
 
 async function commitWithCopilot(repoGit, mappingName) {
   try {
-    console.log(`[${mappingName}] Attempting Copilot commit...`);
+    log(`[${mappingName}] Attempting Copilot commit...`);
     const result = spawnSync(
       'copilot',
       ['-p', 'git commit with message summarizing these changes', '--allow-tool', 'shell(git:*)'],
@@ -165,13 +166,13 @@ async function commitWithCopilot(repoGit, mappingName) {
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(`Copilot exited with code ${result.status}`);
 
-    console.log(`[${mappingName}] Copilot committed successfully`);
+    log(`[${mappingName}] Copilot committed successfully`);
     // Read the commit message Copilot used
-    const log = await repoGit.log({ n: 1 });
-    return log.latest.message;
-  } catch (error) {
+    const gitLog = await repoGit.log({ n: 1 });
+    return gitLog.latest.message;
+  } catch (err) {
     const fallbackMessage = `Backup ${mappingName}: ${new Date().toISOString()}`;
-    console.log(`[${mappingName}] Copilot unavailable, using fallback: ${error.message}`);
+    log(`[${mappingName}] Copilot unavailable, using fallback: ${err.message}`);
     await repoGit.commit(fallbackMessage);
     return fallbackMessage;
   }
@@ -196,32 +197,32 @@ if (require.main === module) {
   };
 
   async function runBackup() {
-    console.log(`=== Git Backup Started at ${new Date().toISOString()} ===`);
+    log(`=== Git Backup Started at ${new Date().toISOString()} ===`);
     const repoGit = await prepareRepo(globalConfig);
     const result = await runBackupForMapping(repoGit, mapping, globalConfig);
     if (result) {
-      console.log(`Committed ${result.filesChanged} files: ${result.commitMessage}`);
+      log(`Committed ${result.filesChanged} files: ${result.commitMessage}`);
     }
-    console.log(`=== Git Backup Completed at ${new Date().toISOString()} ===`);
+    log(`=== Git Backup Completed at ${new Date().toISOString()} ===`);
   }
 
   const isScheduledMode = process.argv.includes('--schedule') || process.env.RUN_SCHEDULER === 'true';
 
   if (isScheduledMode) {
-    console.log(`=== Git Backup Scheduler Starting (every ${globalConfig.backupIntervalHours}h) ===`);
+    log(`=== Git Backup Scheduler Starting (every ${globalConfig.backupIntervalHours}h) ===`);
 
-    runBackup().catch((err) => console.error('Initial backup failed:', err.message));
+    runBackup().catch((err) => error('Initial backup failed:', err.message));
 
     const cronExpression = `0 */${globalConfig.backupIntervalHours} * * *`;
     cron.schedule(cronExpression, () => {
-      runBackup().catch((err) => console.error('Scheduled backup failed:', err.message));
+      runBackup().catch((err) => error('Scheduled backup failed:', err.message));
     });
 
     process.on('SIGTERM', () => process.exit(0));
     process.on('SIGINT', () => process.exit(0));
   } else {
     runBackup().catch((err) => {
-      console.error('Backup failed:', err.message);
+      error('Backup failed:', err.message);
       process.exit(1);
     });
   }
