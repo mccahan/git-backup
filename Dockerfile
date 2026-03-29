@@ -20,7 +20,7 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 # Copy scripts
-COPY backup.js config.js history.js github.js server.js /usr/local/bin/
+COPY backup.js config.js history.js github.js logger.js server.js /usr/local/bin/
 COPY public/ /usr/local/bin/public/
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 
