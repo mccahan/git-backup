@@ -7,6 +7,41 @@ const simpleGit = require('simple-git');
 const { log, error } = require('./logger');
 
 const REPO_DIR = '/repo';
+// Where the Copilot CLI keeps the versions it updates itself to (one directory each, never removed).
+const COPILOT_PKG_DIR = path.join(process.env.HOME || '/root', '.cache', 'copilot', 'pkg');
+
+/** Compares version directory names like "1.0.89" numerically. */
+function compareVersions(a, b) {
+  const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = b.split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0);
+  }
+  return 0;
+}
+
+/**
+ * Deletes every Copilot CLI version but the newest (per platform directory),
+ * and its leftover downloads. The CLI updates itself on use and keeps each
+ * old version (150-200 MB apiece) in the container's writable layer.
+ * Runs before a backup, so no Copilot process is using an old version.
+ */
+function pruneCopilotCache(pkgDir = COPILOT_PKG_DIR) {
+  if (!fs.existsSync(pkgDir)) return;
+  for (const platform of fs.readdirSync(pkgDir)) {
+    const dir = path.join(pkgDir, platform);
+    if (!fs.statSync(dir).isDirectory()) continue;
+    if (platform === 'tmp') {
+      for (const f of fs.readdirSync(dir)) fs.rmSync(path.join(dir, f), { recursive: true, force: true });
+      continue;
+    }
+    const versions = fs.readdirSync(dir).filter((v) => /^\d+(\.\d+)*$/.test(v)).sort(compareVersions);
+    for (const old of versions.slice(0, -1)) {
+      fs.rmSync(path.join(dir, old), { recursive: true, force: true });
+      log(`Removed old Copilot CLI ${platform}/${old}`);
+    }
+  }
+}
 
 /**
  * Build a global config object from environment variables.
@@ -42,6 +77,12 @@ function getGlobalConfig() {
  */
 async function prepareRepo(globalConfig) {
   const { repoUrl, branch, repoDir, userName, userEmail } = globalConfig;
+
+  try {
+    pruneCopilotCache();
+  } catch (err) {
+    error(`Couldn't prune the Copilot CLI cache: ${err.message}`);
+  }
 
   if (fs.existsSync(repoDir)) {
     if (repoDir !== REPO_DIR) {
@@ -178,7 +219,7 @@ async function commitWithCopilot(repoGit, mappingName) {
   }
 }
 
-module.exports = { getGlobalConfig, prepareRepo, runBackupForMapping };
+module.exports = { getGlobalConfig, prepareRepo, runBackupForMapping, pruneCopilotCache };
 
 // Standalone execution (backward compat)
 if (require.main === module) {
